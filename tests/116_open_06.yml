@@ -1,0 +1,476 @@
+---
+
+- name: setup_open_06
+  type: setup
+  tmpdirs:
+    - name: 116_open_06_fs
+      varname: config_dir
+    - name: 116_open_06_fs_mount
+      varname: mount_dir
+      mode: 0755
+  randnames:
+    - test_volume
+    - test_rg
+    - test_ug
+    - test_n0
+    - test_n1
+  vars:
+    - name: n0
+      value: $mount_dir/$test_n0
+    - name: n1
+      value: $mount_dir/$test_n0/$test_n1
+    - name: syndicate_conf
+      value: $config_dir/syndicate.conf
+    - name: rg_driver
+      value: $SYNDICATE_PYTHON_ROOT/syndicate/rg/drivers/disk
+    - name: rg_path
+      value: $SYNDICATE_RG_ROOT/syndicate-rg
+    - name: ug_path
+      value: $SYNDICATE_UG_ROOT/syndicatefs
+
+- name: config
+  type: sequential
+  tasks:
+    - name: setup
+      command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS"
+
+    - name: add test volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name=$test_volume description="test volume" blocksize=4096 email=$SYNDICATE_ADMIN
+
+    - name: create RG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_rg type=RG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
+
+    - name: update RG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_rg caps=ALL port=31112 driver=$rg_driver
+
+    - name: create UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_ug type=UG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
+
+    - name: update UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_ug caps=ALL
+
+- name: daemon UG/RG
+  type: daemon
+  tasks:
+    - name: start RG
+      command: $rg_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_rg
+      exit: 0
+
+    - name: start UG
+      command: $ug_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_ug $mount_dir
+      exit: 0
+
+- name: check syndicate is mounted
+  type: sequential
+  tasks:
+    - name: wait for syndicatefs to be mounted
+      command: sleep 5s
+
+    - name: test filesystem type
+      command: stat -f -L -c %T $mount_dir
+      compareout: "fuseblk"
+
+- name: run open tests 06
+  type: sequential
+  tasks:
+    # expect 0 mkdir ${n0} 0755
+    - name: T1 - expect 0 mkdir [n0] 0755
+      command: fstest mkdir ${n0} 0755
+      compareout: "0"
+
+    # expect 0 chown ${n0} 65534 65534
+    - name: T1 - expect 0 chown [n0] 65534 65534
+      command: sudo fstest chown ${n0} 65534 65534
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 create ${n1} 0644
+    - name: T2 - expect 0 -u 65534 -g 65534 create [n1] 0644
+      command: sudo fstest -u 65534 -g 65534 create ${n1} 0644
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 chmod ${n1} 0600
+    - name: T3 - expect 0 -u 65534 -g 65534 chmod [n1] 0600
+      command: sudo fstest -u 65534 -g 65534 chmod ${n1} 0600
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 open ${n1} O_RDONLY
+    - name: T3 - expect 0 -u 65534 -g 65534 open [n1] O_RDONLY
+      command: sudo fstest -u 65534 -g 65534 open ${n1} O_RDONLY
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 open ${n1} O_WRONLY
+    - name: T3 - expect 0 -u 65534 -g 65534 open [n1] O_WRONLY
+      command: sudo fstest -u 65534 -g 65534 open ${n1} O_WRONLY
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 open ${n1} O_RDWR
+    - name: T3 - expect 0 -u 65534 -g 65534 open [n1] O_RDWR
+      command: sudo fstest -u 65534 -g 65534 open ${n1} O_RDWR
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 chmod ${n1} 0060
+    - name: T3 - expect 0 -u 65534 -g 65534 chmod [n1] 0060
+      command: sudo fstest -u 65534 -g 65534 chmod ${n1} 0060
+      compareout: "0"
+
+    # expect 0 -u 65533 -g 65534 open ${n1} O_RDONLY
+    - name: T3 - expect 0 -u 65533 -g 65534 open [n1] O_RDONLY
+      command: sudo fstest -u 65533 -g 65534 open ${n1} O_RDONLY
+      compareout: "0"
+
+    # expect 0 -u 65533 -g 65534 open ${n1} O_WRONLY
+    - name: T3 - expect 0 -u 65533 -g 65534 open [n1] O_WRONLY
+      command: sudo fstest -u 65533 -g 65534 open ${n1} O_WRONLY
+      compareout: "0"
+
+    # expect 0 -u 65533 -g 65534 open ${n1} O_RDWR
+    - name: T3 - expect 0 -u 65533 -g 65534 open [n1] O_RDWR
+      command: sudo fstest -u 65533 -g 65534 open ${n1} O_RDWR
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 chmod ${n1} 0006
+    - name: T3 - expect 0 -u 65534 -g 65534 chmod [n1] 0006
+      command: sudo fstest -u 65534 -g 65534 chmod ${n1} 0006
+      compareout: "0"
+
+    # expect 0 -u 65533 -g 65533 open ${n1} O_RDONLY
+    - name: T3 - expect 0 -u 65533 -g 65533 open [n1] O_RDONLY
+      command: sudo fstest -u 65533 -g 65533 open ${n1} O_RDONLY
+      compareout: "0"
+
+    # expect 0 -u 65533 -g 65533 open ${n1} O_WRONLY
+    - name: T3 - expect 0 -u 65533 -g 65533 open [n1] O_WRONLY
+      command: sudo fstest -u 65533 -g 65533 open ${n1} O_WRONLY
+      compareout: "0"
+
+    # expect 0 -u 65533 -g 65533 open ${n1} O_RDWR
+    - name: T3 - expect 0 -u 65533 -g 65533 open [n1] O_RDWR
+      command: sudo fstest -u 65533 -g 65533 open ${n1} O_RDWR
+      compareout: "0"
+
+
+    # expect 0 -u 65534 -g 65534 chmod ${n1} 0477
+    - name: T4 - expect 0 -u 65534 -g 65534 chmod [n1] 0477
+      command: sudo fstest -u 65534 -g 65534 chmod ${n1} 0477
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 open ${n1} O_RDONLY
+    - name: T4 - expect 0 -u 65534 -g 65534 open [n1] O_RDONLY
+      command: sudo fstest -u 65534 -g 65534 open ${n1} O_RDONLY
+      compareout: "0"
+
+    # expect EACCES -u 65534 -g 65534 open ${n1} O_WRONLY
+    - name: T4 - expect EACCES -u 65534 -g 65534 open [n1] O_WRONLY
+      command: sudo fstest -u 65534 -g 65534 open ${n1} O_WRONLY
+      compareout: "EACCES"
+      exit: 1
+
+    # expect EACCES -u 65534 -g 65534 open ${n1} O_RDWR
+    - name: T4 - expect EACCES -u 65534 -g 65534 open [n1] O_RDWR
+      command: sudo fstest -u 65534 -g 65534 open ${n1} O_RDWR
+      compareout: "EACCES"
+      exit: 1
+
+    # expect 0 -u 65534 -g 65534 chmod ${n1} 0747
+    - name: T4 - expect 0 -u 65534 -g 65534 chmod [n1] 0747
+      command: sudo fstest -u 65534 -g 65534 chmod ${n1} 0747
+      compareout: "0"
+
+    # expect 0 -u 65533 -g 65534 open ${n1} O_RDONLY
+    - name: T4 - expect 0 -u 65533 -g 65534 open [n1] O_RDONLY
+      command: sudo fstest -u 65533 -g 65534 open ${n1} O_RDONLY
+      compareout: "0"
+
+    # expect EACCES -u 65533 -g 65534 open ${n1} O_WRONLY
+    - name: T4 - expect EACCES -u 65533 -g 65534 open [n1] O_WRONLY
+      command: sudo fstest -u 65533 -g 65534 open ${n1} O_WRONLY
+      compareout: "EACCES"
+      exit: 1
+
+    # expect EACCES -u 65533 -g 65534 open ${n1} O_RDWR
+    - name: T4 - expect EACCES -u 65533 -g 65534 open [n1] O_RDWR
+      command: sudo fstest -u 65533 -g 65534 open ${n1} O_RDWR
+      compareout: "EACCES"
+      exit: 1
+
+    # expect 0 -u 65534 -g 65534 chmod ${n1} 0774
+    - name: T4 - expect 0 -u 65534 -g 65534 chmod [n1] 0774
+      command: sudo fstest -u 65534 -g 65534 chmod ${n1} 0774
+      compareout: "0"
+
+    # expect 0 -u 65533 -g 65533 open ${n1} O_RDONLY
+    - name: T4 - expect 0 -u 65533 -g 65533 open [n1] O_RDONLY
+      command: sudo fstest -u 65533 -g 65533 open ${n1} O_RDONLY
+      compareout: "0"
+
+    # expect EACCES -u 65533 -g 65533 open ${n1} O_WRONLY
+    - name: T4 - expect EACCES -u 65533 -g 65533 open [n1] O_WRONLY
+      command: sudo fstest -u 65533 -g 65533 open ${n1} O_WRONLY
+      compareout: "EACCES"
+      exit: 1
+
+    # expect EACCES -u 65533 -g 65533 open ${n1} O_RDWR
+    - name: T4 - expect EACCES -u 65533 -g 65533 open [n1] O_RDWR
+      command: sudo fstest -u 65533 -g 65533 open ${n1} O_RDWR
+      compareout: "EACCES"
+      exit: 1
+
+
+    # expect 0 -u 65534 -g 65534 chmod ${n1} 0277
+    - name: T5 - expect 0 -u 65534 -g 65534 chmod [n1] 0277
+      command: sudo fstest -u 65534 -g 65534 chmod ${n1} 0277
+      compareout: "0"
+
+    # expect EACCES -u 65534 -g 65534 open ${n1} O_RDONLY
+    - name: T5 - expect EACCES -u 65534 -g 65534 open [n1] O_RDONLY
+      command: sudo fstest -u 65534 -g 65534 open ${n1} O_RDONLY
+      compareout: "EACCES"
+      exit: 1
+
+    # expect 0 -u 65534 -g 65534 open ${n1} O_WRONLY
+    - name: T5 - expect 0 -u 65534 -g 65534 open [n1] O_WRONLY
+      command: sudo fstest -u 65534 -g 65534 open ${n1} O_WRONLY
+      compareout: "0"
+
+    # expect EACCES -u 65534 -g 65534 open ${n1} O_RDWR
+    - name: T5 - expect EACCES -u 65534 -g 65534 open [n1] O_RDWR
+      command: sudo fstest -u 65534 -g 65534 open ${n1} O_RDWR
+      compareout: "EACCES"
+      exit: 1
+
+    # expect 0 -u 65534 -g 65534 chmod ${n1} 0727
+    - name: T5 - expect 0 -u 65534 -g 65534 chmod [n1] 0727
+      command: sudo fstest -u 65534 -g 65534 chmod ${n1} 0727
+      compareout: "0"
+
+    # expect EACCES -u 65533 -g 65534 open ${n1} O_RDONLY
+    - name: T5 - expect EACCES -u 65533 -g 65534 open [n1] O_RDONLY
+      command: sudo fstest -u 65533 -g 65534 open ${n1} O_RDONLY
+      compareout: "EACCES"
+      exit: 1
+
+    # expect 0 -u 65533 -g 65534 open ${n1} O_WRONLY
+    - name: T5 - expect 0 -u 65533 -g 65534 open [n1] O_WRONLY
+      command: sudo fstest -u 65533 -g 65534 open ${n1} O_WRONLY
+      compareout: "0"
+
+    # expect EACCES -u 65533 -g 65534 open ${n1} O_RDWR
+    - name: T5 - expect EACCES -u 65533 -g 65534 open [n1] O_RDWR
+      command: sudo fstest -u 65533 -g 65534 open ${n1} O_RDWR
+      compareout: "EACCES"
+      exit: 1
+
+    # expect 0 -u 65534 -g 65534 chmod ${n1} 0772
+    - name: T5 - expect 0 -u 65534 -g 65534 chmod [n1] 0772
+      command: sudo fstest -u 65534 -g 65534 chmod ${n1} 0772
+      compareout: "0"
+
+    # expect EACCES -u 65533 -g 65533 open ${n1} O_RDONLY
+    - name: T5 - expect EACCES -u 65533 -g 65533 open [n1] O_RDONLY
+      command: sudo fstest -u 65533 -g 65533 open ${n1} O_RDONLY
+      compareout: "EACCES"
+      exit: 1
+
+    # expect 0 -u 65533 -g 65533 open ${n1} O_WRONLY
+    - name: T5 - expect 0 -u 65533 -g 65533 open [n1] O_WRONLY
+      command: sudo fstest -u 65533 -g 65533 open ${n1} O_WRONLY
+      compareout: "0"
+
+    # expect EACCES -u 65533 -g 65533 open ${n1} O_RDWR
+    - name: T5 - expect EACCES -u 65533 -g 65533 open [n1] O_RDWR
+      command: sudo fstest -u 65533 -g 65533 open ${n1} O_RDWR
+      compareout: "EACCES"
+      exit: 1
+
+
+    # expect 0 -u 65534 -g 65534 chmod ${n1} 0177
+    - name: T6 - expect 0 -u 65534 -g 65534 chmod [n1] 0177
+      command: sudo fstest -u 65534 -g 65534 chmod ${n1} 0177
+      compareout: "0"
+
+    # expect EACCES -u 65534 -g 65534 open ${n1} O_RDONLY
+    - name: T6 - expect EACCES -u 65534 -g 65534 open [n1] O_RDONLY
+      command: sudo fstest -u 65534 -g 65534 open ${n1} O_RDONLY
+      compareout: "EACCES"
+      exit: 1
+
+    # expect EACCES -u 65534 -g 65534 open ${n1} O_WRONLY
+    - name: T6 - expect EACCES -u 65534 -g 65534 open [n1] O_WRONLY
+      command: sudo fstest -u 65534 -g 65534 open ${n1} O_WRONLY
+      compareout: "EACCES"
+      exit: 1
+
+    # expect EACCES -u 65534 -g 65534 open ${n1} O_RDWR
+    - name: T6 - expect EACCES -u 65534 -g 65534 open [n1] O_RDWR
+      command: sudo fstest -u 65534 -g 65534 open ${n1} O_RDWR
+      compareout: "EACCES"
+      exit: 1
+
+    # expect 0 -u 65534 -g 65534 chmod ${n1} 0717
+    - name: T6 - expect 0 -u 65534 -g 65534 chmod [n1] 0717
+      command: sudo fstest -u 65534 -g 65534 chmod ${n1} 0717
+      compareout: "0"
+
+    # expect EACCES -u 65533 -g 65534 open ${n1} O_RDONLY
+    - name: T6 - expect EACCES -u 65533 -g 65534 open [n1] O_RDONLY
+      command: sudo fstest -u 65533 -g 65534 open ${n1} O_RDONLY
+      compareout: "EACCES"
+      exit: 1
+
+    # expect EACCES -u 65533 -g 65534 open ${n1} O_WRONLY
+    - name: T6 - expect EACCES -u 65533 -g 65534 open [n1] O_WRONLY
+      command: sudo fstest -u 65533 -g 65534 open ${n1} O_WRONLY
+      compareout: "EACCES"
+      exit: 1
+
+    # expect EACCES -u 65533 -g 65534 open ${n1} O_RDWR
+    - name: T6 - expect EACCES -u 65533 -g 65534 open [n1] O_RDWR
+      command: sudo fstest -u 65533 -g 65534 open ${n1} O_RDWR
+      compareout: "EACCES"
+      exit: 1
+
+    # expect 0 -u 65534 -g 65534 chmod ${n1} 0771
+    - name: T6 - expect 0 -u 65534 -g 65534 chmod [n1] 0771
+      command: sudo fstest -u 65534 -g 65534 chmod ${n1} 0771
+      compareout: "0"
+
+    # expect EACCES -u 65533 -g 65533 open ${n1} O_RDONLY
+    - name: T6 - expect EACCES -u 65533 -g 65533 open [n1] O_RDONLY
+      command: sudo fstest -u 65533 -g 65533 open ${n1} O_RDONLY
+      compareout: "EACCES"
+      exit: 1
+
+    # expect EACCES -u 65533 -g 65533 open ${n1} O_WRONLY
+    - name: T6 - expect EACCES -u 65533 -g 65533 open [n1] O_WRONLY
+      command: sudo fstest -u 65533 -g 65533 open ${n1} O_WRONLY
+      compareout: "EACCES"
+      exit: 1
+
+    # expect EACCES -u 65533 -g 65533 open ${n1} O_RDWR
+    - name: T6 - expect EACCES -u 65533 -g 65533 open [n1] O_RDWR
+      command: sudo fstest -u 65533 -g 65533 open ${n1} O_RDWR
+      compareout: "EACCES"
+      exit: 1
+
+
+    # expect 0 -u 65534 -g 65534 chmod ${n1} 0077
+    - name: T7 - expect 0 -u 65534 -g 65534 chmod [n1] 0077
+      command: sudo fstest -u 65534 -g 65534 chmod ${n1} 0077
+      compareout: "0"
+
+    # expect EACCES -u 65534 -g 65534 open ${n1} O_RDONLY
+    - name: T7 - expect EACCES -u 65534 -g 65534 open [n1] O_RDONLY
+      command: sudo fstest -u 65534 -g 65534 open ${n1} O_RDONLY
+      compareout: "EACCES"
+      exit: 1
+
+    # expect EACCES -u 65534 -g 65534 open ${n1} O_WRONLY
+    - name: T7 - expect EACCES -u 65534 -g 65534 open [n1] O_WRONLY
+      command: sudo fstest -u 65534 -g 65534 open ${n1} O_WRONLY
+      compareout: "EACCES"
+      exit: 1
+
+    # expect EACCES -u 65534 -g 65534 open ${n1} O_RDWR
+    - name: T7 - expect EACCES -u 65534 -g 65534 open [n1] O_RDWR
+      command: sudo fstest -u 65534 -g 65534 open ${n1} O_RDWR
+      compareout: "EACCES"
+      exit: 1
+
+    # expect 0 -u 65534 -g 65534 chmod ${n1} 0707
+    - name: T7 - expect 0 -u 65534 -g 65534 chmod [n1] 0707
+      command: sudo fstest -u 65534 -g 65534 chmod ${n1} 0707
+      compareout: "0"
+
+    # expect EACCES -u 65533 -g 65534 open ${n1} O_RDONLY
+    - name: T7 - expect EACCES -u 65533 -g 65534 open [n1] O_RDONLY
+      command: sudo fstest -u 65533 -g 65534 open ${n1} O_RDONLY
+      compareout: "EACCES"
+      exit: 1
+
+    # expect EACCES -u 65533 -g 65534 open ${n1} O_WRONLY
+    - name: T7 - expect EACCES -u 65533 -g 65534 open [n1] O_WRONLY
+      command: sudo fstest -u 65533 -g 65534 open ${n1} O_WRONLY
+      compareout: "EACCES"
+      exit: 1
+
+    # expect EACCES -u 65533 -g 65534 open ${n1} O_RDWR
+    - name: T7 - expect EACCES -u 65533 -g 65534 open [n1] O_RDWR
+      command: sudo fstest -u 65533 -g 65534 open ${n1} O_RDWR
+      compareout: "EACCES"
+      exit: 1
+
+    # expect 0 -u 65534 -g 65534 chmod ${n1} 0770
+    - name: T7 - expect 0 -u 65534 -g 65534 chmod [n1] 0770
+      command: sudo fstest -u 65534 -g 65534 chmod ${n1} 0770
+      compareout: "0"
+
+    # expect EACCES -u 65533 -g 65533 open ${n1} O_RDONLY
+    - name: T7 - expect EACCES -u 65533 -g 65533 open [n1] O_RDONLY
+      command: sudo fstest -u 65533 -g 65533 open ${n1} O_RDONLY
+      compareout: "EACCES"
+      exit: 1
+
+    # expect EACCES -u 65533 -g 65533 open ${n1} O_WRONLY
+    - name: T7 - expect EACCES -u 65533 -g 65533 open [n1] O_WRONLY
+      command: sudo fstest -u 65533 -g 65533 open ${n1} O_WRONLY
+      compareout: "EACCES"
+      exit: 1
+
+    # expect EACCES -u 65533 -g 65533 open ${n1} O_RDWR
+    - name: T7 - expect EACCES -u 65533 -g 65533 open [n1] O_RDWR
+      command: sudo fstest -u 65533 -g 65533 open ${n1} O_RDWR
+      compareout: "EACCES"
+      exit: 1
+
+    #
+    # EACCES for opening a directory read-only with no read access
+    # EACCES for reading a directory with no execute access
+    #
+
+    # expect 0 -u 65534 -g 65534 open ${n0} O_RDONLY
+    - name: T7 - expect 0 -u 65534 -g 65534 open [n0] O_RDONLY
+      command: sudo fstest -u 65534 -g 65534 open ${n0} O_RDONLY
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 chmod ${n0} 0355
+    - name: T7 - expect 0 -u 65534 -g 65534 chmod [n0] 0355
+      command: sudo fstest -u 65534 -g 65534 chmod ${n0} 0355
+      compareout: "0"
+
+    # expect EACCES -u 65534 -g 65534 open ${n0} O_RDONLY
+    - name: T7 - expect EACCES -u 65534 -g 65534 open [n0] O_RDONLY
+      command: sudo fstest -u 65534 -g 65534 open ${n0} O_RDONLY
+      compareout: "EACCES"
+      exit: 1
+
+    # expect 0770 -u 65534 -g 65534 stat ${n1} mode
+    - name: T7 - expect 0770 -u 65534 -g 65534 stat [n1] mode
+      command: sudo fstest -u 65534 -g 65534 stat ${n1} mode
+      compareout: "0770"
+
+    # expect 0 -u 65534 -g 65534 chmod ${n0} 0655
+    - name: T7 - expect 0 -u 65534 -g 65534 chmod [n0] 0655
+      command: sudo fstest -u 65534 -g 65534 chmod ${n0} 0655
+      compareout: "0"
+
+    # expect EACCES -u 65534 -g 65534 stat ${n1} mode
+    - name: T7 - expect EACCES -u 65534 -g 65534 stat [n1] mode
+      command: sudo fstest -u 65534 -g 65534 stat ${n1} mode
+      compareout: "EACCES"
+      exit: 1
+
+
+    # expect 0 -u 65534 -g 65534 chmod ${n0} 0755
+    - name: T8 - expect 0 -u 65534 -g 65534 chmod [n0] 0755
+      command: sudo fstest -u 65534 -g 65534 chmod ${n0} 0755
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 unlink ${n1}
+    - name: T8 - expect 0 -u 65534 -g 65534 unlink [n1]
+      command: sudo fstest -u 65534 -g 65534 unlink ${n1}
+      compareout: "0"
+
+    # expect 0 rmdir ${n0}
+    - name: T9 - expect 0 rmdir [n0]
+      command: sudo fstest rmdir ${n0}
+      compareout: "0"

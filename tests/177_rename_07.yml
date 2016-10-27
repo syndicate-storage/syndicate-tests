@@ -1,0 +1,674 @@
+---
+
+- name: setup_rename_07
+  type: setup
+  tmpdirs:
+    - name: 177_rename_07_fs
+      varname: config_dir
+    - name: 177_rename_07_fs_mount
+      varname: mount_dir
+      mode: 0755
+  randnames:
+    - test_volume
+    - test_rg
+    - test_ug
+    - test_n0
+    - test_n1
+    - test_n2
+    - test_n3
+    - test_n4
+  vars:
+    - name: n0
+      value: $mount_dir/$test_n4/$test_n0
+    - name: n1
+      value: $mount_dir/$test_n4/$test_n1
+    - name: n2
+      value: $test_n2
+    - name: n3
+      value: $test_n3
+    - name: n4
+      value: $mount_dir/$test_n4
+    - name: syndicate_conf
+      value: $config_dir/syndicate.conf
+    - name: rg_driver
+      value: $SYNDICATE_PYTHON_ROOT/syndicate/rg/drivers/disk
+    - name: rg_path
+      value: $SYNDICATE_RG_ROOT/syndicate-rg
+    - name: ug_path
+      value: $SYNDICATE_UG_ROOT/syndicatefs
+
+- name: config
+  type: sequential
+  tasks:
+    - name: setup
+      command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS"
+
+    - name: add test volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name=$test_volume description="test volume" blocksize=4096 email=$SYNDICATE_ADMIN
+
+    - name: create RG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_rg type=RG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
+
+    - name: update RG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_rg caps=ALL port=31112 driver=$rg_driver
+
+    - name: create UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_ug type=UG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
+
+    - name: update UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_ug caps=ALL
+
+- name: daemon UG/RG
+  type: daemon
+  tasks:
+    - name: start RG
+      command: $rg_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_rg
+      exit: 0
+
+    - name: start UG
+      command: $ug_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_ug $mount_dir
+      exit: 0
+
+- name: check syndicate is mounted
+  type: sequential
+  tasks:
+    - name: wait for syndicatefs to be mounted
+      command: sleep 5s
+
+    - name: test filesystem type
+      command: stat -f -L -c %T $mount_dir
+      compareout: "fuseblk"
+
+- name: run rename tests 07
+  type: sequential
+  tasks:
+    # expect 0 mkdir ${n4} 0755
+    - name: T1 - expect 0 mkdir [n4] 0755
+      command: fstest mkdir ${n4} 0755
+      compareout: "0"
+
+    # expect 0 mkdir ${n0} 0755
+    - name: T2 - expect 0 mkdir [n0] 0755
+      command: fstest mkdir ${n0} 0755
+      compareout: "0"
+
+    # expect 0 chown ${n0} 65534 65534
+    - name: T2 - expect 0 chown [n0] 65534 65534
+      command: sudo fstest chown ${n0} 65534 65534
+      compareout: "0"
+
+
+    # expect 0 mkdir ${n1} 0755
+    - name: T3 - expect 0 mkdir [n1] 0755
+      command: fstest mkdir ${n1} 0755
+      compareout: "0"
+
+    # expect 0 chmod ${n1} 01777
+    - name: T3 - expect 0 chmod [n1] 01777
+      command: fstest chmod ${n1} 01777
+      compareout: "0"
+
+
+    # User owns both: the sticky directory and the destination file.
+    # expect 0 chown ${n1} 65534 65534
+    - name: T4 - expect 0 chown [n1] 65534 65534
+      command: sudo fstest chown ${n1} 65534 65534
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 create ${n0}/${n2} 0644
+    - name: T4 - expect 0 -u 65534 -g 65534 create [n0]/[n2] 0644
+      command: sudo fstest -u 65534 -g 65534 create ${n0}/${n2} 0644
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 create ${n1}/${n3} 0644
+    - name: T4 - expect 0 -u 65534 -g 65534 create [n1]/[n3] 0644
+      command: sudo fstest -u 65534 -g 65534 create ${n1}/${n3} 0644
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+    - name: T4 - expect 0 -u 65534 -g 65534 rename [n0]/[n2] [n1]/[n3]
+      command: sudo fstest -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+      compareout: "0"
+
+    # expect ENOENT lstat ${n0}/${n2} inode
+    - name: T4 - expect ENOENT lstat [n0]/[n2] inode
+      command: fstest lstat ${n0}/${n2} inode
+      compareout: "ENOENT"
+      exit: 1
+
+    # expect 0 -u 65534 -g 65534 rename ${n1}/${n3} ${n0}/${n2}
+    - name: T4 - expect 0 -u 65534 -g 65534 rename [n1]/[n3] [n0]/[n2]
+      command: sudo fstest -u 65534 -g 65534 rename ${n1}/${n3} ${n0}/${n2}
+      compareout: "0"
+
+    # expect ENOENT lstat ${n1}/${n3} inode
+    - name: T4 - expect ENOENT lstat [n1]/[n3] inode
+      command: fstest lstat ${n1}/${n3} inode
+      compareout: "ENOENT"
+      exit: 1
+
+#    # expect 0 -u 65534 -g 65534 symlink test ${n1}/${n3}
+#    - name: T4 - expect 0 -u 65534 -g 65534 symlink test [n1]/[n3]
+#      command: sudo fstest -u 65534 -g 65534 symlink test ${n1}/${n3}
+#      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+    - name: T4 - expect 0 -u 65534 -g 65534 rename [n0]/[n2] [n1]/[n3]
+      command: sudo fstest -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+      compareout: "0"
+
+    # expect ENOENT lstat ${n0}/${n2} inode
+    - name: T4 - expect ENOENT lstat [n0]/[n2] inode
+      command: fstest lstat ${n0}/${n2} inode
+      compareout: "ENOENT"
+      exit: 1
+
+    # expect 0 unlink ${n1}/${n3}
+    - name: T4 - expect 0 unlink [n1]/[n3]
+      command: sudo fstest unlink ${n1}/${n3}
+      compareout: "0"
+
+    # User owns the sticky directory, but doesn't own the destination file.
+    # expect 0 chown ${n1} 65534 65534
+    - name: T4 - expect 0 chown [n1] 65534 65534
+      command: sudo fstest chown ${n1} 65534 65534
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 create ${n0}/${n2} 0644
+    - name: T4 - expect 0 -u 65534 -g 65534 create [n0]/[n2] 0644
+      command: sudo fstest -u 65534 -g 65534 create ${n0}/${n2} 0644
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 create ${n1}/${n3} 0644
+    - name: T4 - expect 0 -u 65534 -g 65534 create [n1]/[n3] 0644
+      command: sudo fstest -u 65534 -g 65534 create ${n1}/${n3} 0644
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+    - name: T4 - expect 0 -u 65534 -g 65534 rename [n0]/[n2] [n1]/[n3]
+      command: sudo fstest -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+      compareout: "0"
+
+    # expect ENOENT lstat ${n0}/${n2} type
+    - name: T4 - expect ENOENT lstat [n0]/[n2] type
+      command: fstest lstat ${n0}/${n2} type
+      compareout: "ENOENT"
+      exit: 1
+
+    # expect 0 -u 65534 -g 65534 rename ${n1}/${n3} ${n0}/${n2}
+    - name: T4 - expect 0 -u 65534 -g 65534 rename [n1]/[n3] [n0]/[n2]
+      command: sudo fstest -u 65534 -g 65534 rename ${n1}/${n3} ${n0}/${n2}
+      compareout: "0"
+
+    # expect ENOENT lstat ${n1}/${n3} inode
+    - name: T4 - expect ENOENT lstat [n1]/[n3] inode
+      command: fstest lstat ${n1}/${n3} inode
+      compareout: "ENOENT"
+      exit: 1
+
+#    # expect 0 -u 65534 -g 65534 symlink test ${n1}/${n3}
+#    - name: T4 - expect 0 -u 65534 -g 65534 symlink test [n1]/[n3]
+#      command: sudo fstest -u 65534 -g 65534 symlink test ${n1}/${n3}
+#      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+    - name: T4 - expect 0 -u 65534 -g 65534 rename [n0]/[n2] [n1]/[n3]
+      command: sudo fstest -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+      compareout: "0"
+
+    # expect ENOENT lstat ${n0}/${n2} inode
+    - name: T4 - expect ENOENT lstat [n0]/[n2] inode
+      command: fstest lstat ${n0}/${n2} inode
+      compareout: "ENOENT"
+      exit: 1
+
+    # expect 0 unlink ${n1}/${n3}
+    - name: T4 - expect 0 unlink [n1]/[n3]
+      command: sudo fstest unlink ${n1}/${n3}
+      compareout: "0"
+
+    # User owns the destination file, but doesn't own the sticky directory.
+    # expect 0 chown ${n1} 65533 65533
+    - name: T4 - expect 0 chown [n1] 65533 65533
+      command: sudo fstest chown ${n1} 65533 65533
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 create ${n0}/${n2} 0644
+    - name: T4 - expect 0 -u 65534 -g 65534 create [n0]/[n2] 0644
+      command: sudo fstest -u 65534 -g 65534 create ${n0}/${n2} 0644
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 create ${n1}/${n3} 0644
+    - name: T4 - expect 0 -u 65534 -g 65534 create [n1]/[n3] 0644
+      command: sudo fstest -u 65534 -g 65534 create ${n1}/${n3} 0644
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+    - name: T4 - expect 0 -u 65534 -g 65534 rename [n0]/[n2] [n1]/[n3]
+      command: sudo fstest -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+      compareout: "0"
+
+    # expect ENOENT lstat ${n0}/${n2} type
+    - name: T4 - expect ENOENT lstat [n0]/[n2] type
+      command: fstest lstat ${n0}/${n2} type
+      compareout: "ENOENT"
+      exit: 1
+
+    # expect 0 -u 65534 -g 65534 rename ${n1}/${n3} ${n0}/${n2}
+    - name: T4 - expect 0 -u 65534 -g 65534 rename [n1]/[n3] [n0]/[n2]
+      command: sudo fstest -u 65534 -g 65534 rename ${n1}/${n3} ${n0}/${n2}
+      compareout: "0"
+
+    # expect ENOENT lstat ${n1}/${n3} inode
+    - name: T4 - expect ENOENT lstat [n1]/[n3] inode
+      command: fstest lstat ${n1}/${n3} inode
+      compareout: "ENOENT"
+      exit: 1
+
+#    # expect 0 -u 65534 -g 65534 symlink test ${n1}/${n3}
+#    - name: T4 - expect 0 -u 65534 -g 65534 symlink test [n1]/[n3]
+#      command: sudo fstest -u 65534 -g 65534 symlink test ${n1}/${n3}
+#      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+    - name: T4 - expect 0 -u 65534 -g 65534 rename [n0]/[n2] [n1]/[n3]
+      command: sudo fstest -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+      compareout: "0"
+
+    # expect ENOENT lstat ${n0}/${n2} inode
+    - name: T4 - expect ENOENT lstat [n0]/[n2] inode
+      command: fstest lstat ${n0}/${n2} inode
+      compareout: "ENOENT"
+      exit: 1
+
+    # expect 0 unlink ${n1}/${n3}
+    - name: T4 - expect 0 unlink [n1]/[n3]
+      command: sudo fstest unlink ${n1}/${n3}
+      compareout: "0"
+
+    # User doesn't own the sticky directory nor the destination file.
+    # expect 0 chown ${n1} 65533 65533
+    - name: T4 - expect 0 chown [n1] 65533 65533
+      command: sudo fstest chown ${n1} 65533 65533
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 create ${n0}/${n2} 0644
+    - name: T4 - expect 0 -u 65534 -g 65534 create [n0]/[n2] 0644
+      command: sudo fstest -u 65534 -g 65534 create ${n0}/${n2} 0644
+      compareout: "0"
+
+    # expect 0 -u 65533 -g 65533 create ${n1}/${n3} 0644
+    - name: T4 - expect 0 -u 65533 -g 65533 create [n1]/[n3] 0644
+      command: sudo fstest -u 65533 -g 65533 create ${n1}/${n3} 0644
+      compareout: "0"
+
+    # expect "EACCES|EPERM" -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+    - name: T4 - expect EACCES|EPERM -u 65534 -g 65534 rename [n0]/[n2] [n1]/[n3]
+      command: sudo fstest -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+      compareout: "EPERM"
+      exit: 1
+
+    # expect 0 unlink ${n0}/${n2}
+    - name: T4 - expect 0 unlink [n0]/[n2]
+      command: sudo fstest unlink ${n0}/${n2}
+      compareout: "0"
+
+    # expect 0 unlink ${n1}/${n3}
+    - name: T4 - expect 0 unlink [n1]/[n3]
+      command: sudo fstest unlink ${n1}/${n3}
+      compareout: "0"
+
+
+    # User owns both: the sticky directory and the destination file.
+    # expect 0 chown ${n1} 65534 65534
+    - name: T5 - expect 0 chown [n1] 65534 65534
+      command: sudo fstest chown ${n1} 65534 65534
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 mkdir ${n0}/${n2} 0755
+    - name: T5 - expect 0 -u 65534 -g 65534 mkdir [n0]/[n2] 0755
+      command: sudo fstest -u 65534 -g 65534 mkdir ${n0}/${n2} 0755
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 mkdir ${n1}/${n3} 0755
+    - name: T5 - expect 0 -u 65534 -g 65534 mkdir [n1]/[n3] 0755
+      command: sudo fstest -u 65534 -g 65534 mkdir ${n1}/${n3} 0755
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+    - name: T5 - expect 0 -u 65534 -g 65534 rename [n0]/[n2] [n1]/[n3]
+      command: sudo fstest -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+      compareout: "0"
+
+    # expect ENOENT lstat ${n0}/${n2} type
+    - name: T5 - expect ENOENT lstat [n0]/[n2] type
+      command: fstest lstat ${n0}/${n2} type
+      compareout: "ENOENT"
+      exit: 1
+
+    # expect 0 rmdir ${n1}/${n3}
+    - name: T5 - expect 0 rmdir [n1]/[n3]
+      command: sudo fstest rmdir ${n1}/${n3}
+      compareout: "0"
+
+    # User owns the sticky directory, but doesn't own the destination file.
+    # expect 0 chown ${n1} 65534 65534
+    - name: T5 - expect 0 chown [n1] 65534 65534
+      command: sudo fstest chown ${n1} 65534 65534
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 mkdir ${n0}/${n2} 0755
+    - name: T5 - expect 0 -u 65534 -g 65534 mkdir [n0]/[n2] 0755
+      command: sudo fstest -u 65534 -g 65534 mkdir ${n0}/${n2} 0755
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 mkdir ${n1}/${n3} 0755
+    - name: T5 - expect 0 -u 65534 -g 65534 mkdir [n1]/[n3] 0755
+      command: sudo fstest -u 65534 -g 65534 mkdir ${n1}/${n3} 0755
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+    - name: T5 - expect 0 -u 65534 -g 65534 rename [n0]/[n2] [n1]/[n3]
+      command: sudo fstest -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+      compareout: "0"
+
+    # expect ENOENT lstat ${n0}/${n2} type
+    - name: T5 - expect ENOENT lstat [n0]/[n2] type
+      command: fstest lstat ${n0}/${n2} type
+      compareout: "ENOENT"
+      exit: 1
+
+    # expect 0 rmdir ${n1}/${n3}
+    - name: T5 - expect 0 rmdir [n1]/[n3]
+      command: sudo fstest rmdir ${n1}/${n3}
+      compareout: "0"
+
+    # User owns the destination file, but doesn't own the sticky directory.
+    # expect 0 chown ${n1} 65533 65533
+    - name: T5 - expect 0 chown [n1] 65533 65533
+      command: sudo fstest chown ${n1} 65533 65533
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 mkdir ${n0}/${n2} 0755
+    - name: T5 - expect 0 -u 65534 -g 65534 mkdir [n0]/[n2] 0755
+      command: sudo fstest -u 65534 -g 65534 mkdir ${n0}/${n2} 0755
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 mkdir ${n1}/${n3} 0755
+    - name: T5 - expect 0 -u 65534 -g 65534 mkdir [n1]/[n3] 0755
+      command: sudo fstest -u 65534 -g 65534 mkdir ${n1}/${n3} 0755
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+    - name: T5 - expect 0 -u 65534 -g 65534 rename [n0]/[n2] [n1]/[n3]
+      command: sudo fstest -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+      compareout: "0"
+
+    # expect ENOENT lstat ${n0}/${n2} type
+    - name: T5 - expect ENOENT lstat [n0]/[n2] type
+      command: fstest lstat ${n0}/${n2} type
+      compareout: "ENOENT"
+      exit: 1
+
+    # expect 0 rmdir ${n1}/${n3}
+    - name: T5 - expect 0 rmdir [n1]/[n3]
+      command: sudo fstest rmdir ${n1}/${n3}
+      compareout: "0"
+
+    # User doesn't own the sticky directory nor the destination file.
+    # expect 0 chown ${n1} 65533 65533
+    - name: T5 - expect 0 chown [n1] 65533 65533
+      command: sudo fstest chown ${n1} 65533 65533
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65534 mkdir ${n0}/${n2} 0755
+    - name: T5 - expect 0 -u 65534 -g 65534 mkdir [n0]/[n2] 0755
+      command: sudo fstest -u 65534 -g 65534 mkdir ${n0}/${n2} 0755
+      compareout: "0"
+
+    # expect 0 -u 65533 -g 65533 mkdir ${n1}/${n3} 0755
+    - name: T5 - expect 0 -u 65533 -g 65533 mkdir [n1]/[n3] 0755
+      command: sudo fstest -u 65533 -g 65533 mkdir ${n1}/${n3} 0755
+      compareout: "0"
+
+    # expect "EACCES|EPERM" -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+    - name: T5 - expect EACCES|EPERM -u 65534 -g 65534 rename [n0]/[n2] [n1]/[n3]
+      command: sudo fstest -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+      compareout: "EPERM"
+      exit: 1
+
+    # expect 0 rmdir ${n0}/${n2}
+    - name: T5 - expect 0 rmdir [n0]/[n2]
+      command: sudo fstest rmdir ${n0}/${n2}
+      compareout: "0"
+
+    # expect 0 rmdir ${n1}/${n3}
+    - name: T5 - expect 0 rmdir [n1]/[n3]
+      command: sudo fstest rmdir ${n1}/${n3}
+      compareout: "0"
+
+#    # User owns both: the sticky directory and the destination file.
+#    # expect 0 chown ${n1} 65534 65534
+#    - name: T7 - expect 0 chown [n1] 65534 65534
+#      command: sudo fstest chown ${n1} 65534 65534
+#      compareout: "0"
+
+#    # expect 0 -u 65534 -g 65534 symlink test ${n0}/${n2}
+#    - name: T7 - expect 0 -u 65534 -g 65534 symlink test [n0]/[n2]
+#      command: sudo fstest -u 65534 -g 65534 symlink test ${n0}/${n2}
+#      compareout: "0"
+
+#    # expect 0 -u 65534 -g 65534 symlink test ${n1}/${n3}
+#    - name: T7 - expect 0 -u 65534 -g 65534 symlink test [n1]/[n3]
+#      command: sudo fstest -u 65534 -g 65534 symlink test ${n1}/${n3}
+#      compareout: "0"
+
+#    # expect 0 -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+#    - name: T7 - expect 0 -u 65534 -g 65534 rename [n0]/[n2] [n1]/[n3]
+#      command: sudo fstest -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+#      compareout: "0"
+
+#    # expect ENOENT lstat ${n0}/${n2} inode
+#    - name: T7 - expect ENOENT lstat [n0]/[n2] inode
+#      command: fstest lstat ${n0}/${n2} inode
+#      compareout: "ENOENT"
+#      exit: 1
+
+#    # expect 0 -u 65534 -g 65534 create ${n0}/${n2} 0644
+#    - name: T7 - expect 0 -u 65534 -g 65534 create [n0]/[n2] 0644
+#      command: sudo fstest -u 65534 -g 65534 create ${n0}/${n2} 0644
+#      compareout: "0"
+
+#    # expect 0 -u 65534 -g 65534 rename ${n1}/${n3} ${n0}/${n2}
+#    - name: T7 - expect 0 -u 65534 -g 65534 rename [n1]/[n3] [n0]/[n2]
+#      command: sudo fstest -u 65534 -g 65534 rename ${n1}/${n3} ${n0}/${n2}
+#      compareout: "0"
+
+#    # expect ENOENT lstat ${n1}/${n3} inode
+#    - name: T7 - expect ENOENT lstat [n1]/[n3] inode
+#      command: fstest lstat ${n1}/${n3} inode
+#      compareout: "ENOENT"
+#      exit: 1
+
+#    # expect 0 -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+#    - name: T7 - expect 0 -u 65534 -g 65534 rename [n0]/[n2] [n1]/[n3]
+#      command: sudo fstest -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+#      compareout: "0"
+
+#    # expect ENOENT lstat ${n0}/${n2} inode
+#    - name: T7 - expect ENOENT lstat [n0]/[n2] inode
+#      command: fstest lstat ${n0}/${n2} inode
+#      compareout: "ENOENT"
+#      exit: 1
+
+#    # expect 0 unlink ${n1}/${n3}
+#    - name: T7 - expect 0 unlink [n1]/[n3]
+#      command: sudo fstest unlink ${n1}/${n3}
+#      compareout: "0"
+
+#    # User owns the sticky directory, but doesn't own the destination file.
+#    # expect 0 chown ${n1} 65534 65534
+#    - name: T7 - expect 0 chown [n1] 65534 65534
+#      command: sudo fstest chown ${n1} 65534 65534
+#      compareout: "0"
+
+#    # expect 0 -u 65534 -g 65534 symlink test ${n0}/${n2}
+#    - name: T7 - expect 0 -u 65534 -g 65534 symlink test [n0]/[n2]
+#      command: sudo fstest -u 65534 -g 65534 symlink test ${n0}/${n2}
+#      compareout: "0"
+
+#    # expect 0 -u 65534 -g 65534 symlink test ${n1}/${n3}
+#    - name: T7 - expect 0 -u 65534 -g 65534 symlink test [n1]/[n3]
+#      command: sudo fstest -u 65534 -g 65534 symlink test ${n1}/${n3}
+#      compareout: "0"
+
+#    # expect 0 -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+#    - name: T7 - expect 0 -u 65534 -g 65534 rename [n0]/[n2] [n1]/[n3]
+#      command: sudo fstest -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+#      compareout: "0"
+
+#    # expect ENOENT lstat ${n0}/${n2} type
+#    - name: T7 - expect ENOENT lstat [n0]/[n2] type
+#      command: fstest lstat ${n0}/${n2} type
+#      compareout: "ENOENT"
+#      exit: 1
+
+#    # expect 0 -u 65534 -g 65534 create ${n0}/${n2} 0644
+#    - name: T7 - expect 0 -u 65534 -g 65534 create [n0]/[n2] 0644
+#      command: sudo fstest -u 65534 -g 65534 create ${n0}/${n2} 0644
+#      compareout: "0"
+
+#    # expect 0 -u 65534 -g 65534 rename ${n1}/${n3} ${n0}/${n2}
+#    - name: T7 - expect 0 -u 65534 -g 65534 rename [n1]/[n3] [n0]/[n2]
+#      command: sudo fstest -u 65534 -g 65534 rename ${n1}/${n3} ${n0}/${n2}
+#      compareout: "0"
+
+#    # expect ENOENT lstat ${n1}/${n3} inode
+#    - name: T7 - expect ENOENT lstat [n1]/[n3] inode
+#      command: fstest lstat ${n1}/${n3} inode
+#      compareout: "ENOENT"
+#      exit: 1
+
+#    # expect 0 -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+#    - name: T7 - expect 0 -u 65534 -g 65534 rename [n0]/[n2] [n1]/[n3]
+#      command: sudo fstest -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+#      compareout: "0"
+
+#    # expect ENOENT lstat ${n0}/${n2} inode
+#    - name: T7 - expect ENOENT lstat [n0]/[n2] inode
+#      command: fstest lstat ${n0}/${n2} inode
+#      compareout: "ENOENT"
+#      exit: 1
+
+#    # expect 0 unlink ${n1}/${n3}
+#    - name: T7 - expect 0 unlink [n1]/[n3]
+#      command: sudo fstest unlink ${n1}/${n3}
+#      compareout: "0"
+
+#    # User owns the destination file, but doesn't own the sticky directory.
+#    # expect 0 chown ${n1} 65533 65533
+#    - name: T7 - expect 0 chown [n1] 65533 65533
+#      command: sudo fstest chown ${n1} 65533 65533
+#      compareout: "0"
+
+#    # expect 0 -u 65534 -g 65534 symlink test ${n0}/${n2}
+#    - name: T7 - expect 0 -u 65534 -g 65534 symlink test [n0]/[n2]
+#      command: sudo fstest -u 65534 -g 65534 symlink test ${n0}/${n2}
+#      compareout: "0"
+
+#    # expect 0 -u 65534 -g 65534 symlink test ${n1}/${n3}
+#    - name: T7 - expect 0 -u 65534 -g 65534 symlink test [n1]/[n3]
+#      command: sudo fstest -u 65534 -g 65534 symlink test ${n1}/${n3}
+#      compareout: "0"
+
+#    # expect 0 -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+#    - name: T7 - expect 0 -u 65534 -g 65534 rename [n0]/[n2] [n1]/[n3]
+#      command: sudo fstest -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+#      compareout: "0"
+
+#    # expect ENOENT lstat ${n0}/${n2} type
+#    - name: T7 - expect ENOENT lstat [n0]/[n2] type
+#      command: fstest lstat ${n0}/${n2} type
+#      compareout: "ENOENT"
+#      exit: 1
+
+#    # expect 0 -u 65534 -g 65534 create ${n0}/${n2} 0644
+#    - name: T7 - expect 0 -u 65534 -g 65534 create [n0]/[n2] 0644
+#      command: sudo fstest -u 65534 -g 65534 create ${n0}/${n2} 0644
+#      compareout: "0"
+
+#    # expect 0 -u 65534 -g 65534 rename ${n1}/${n3} ${n0}/${n2}
+#    - name: T7 - expect 0 -u 65534 -g 65534 rename [n1]/[n3] [n0]/[n2]
+#      command: sudo fstest -u 65534 -g 65534 rename ${n1}/${n3} ${n0}/${n2}
+#      compareout: "0"
+
+#    # expect ENOENT lstat ${n1}/${n3} inode
+#    - name: T7 - expect ENOENT lstat [n1]/[n3] inode
+#      command: fstest lstat ${n1}/${n3} inode
+#      compareout: "ENOENT"
+#      exit: 1
+
+#    # expect 0 -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+#    - name: T7 - expect 0 -u 65534 -g 65534 rename [n0]/[n2] [n1]/[n3]
+#      command: sudo fstest -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+#      compareout: "0"
+
+#    # expect ENOENT lstat ${n0}/${n2} inode
+#    - name: T7 - expect ENOENT lstat [n0]/[n2] inode
+#      command: fstest lstat ${n0}/${n2} inode
+#      compareout: "ENOENT"
+#      exit: 1
+
+#    # expect 0 unlink ${n1}/${n3}
+#    - name: T7 - expect 0 unlink [n1]/[n3]
+#      command: sudo fstest unlink ${n1}/${n3}
+#      compareout: "0"
+
+#    # User doesn't own the sticky directory nor the destination file.
+#    # expect 0 chown ${n1} 65533 65533
+#    - name: T7 - expect 0 chown [n1] 65533 65533
+#      command: sudo fstest chown ${n1} 65533 65533
+#      compareout: "0"
+
+#    # expect 0 -u 65534 -g 65534 symlink test ${n0}/${n2}
+#    - name: T7 - expect 0 -u 65534 -g 65534 symlink test [n0]/[n2]
+#      command: sudo fstest -u 65534 -g 65534 symlink test ${n0}/${n2}
+#      compareout: "0"
+
+#    # expect 0 -u 65533 -g 65533 symlink test ${n1}/${n3}
+#    - name: T7 - expect 0 -u 65533 -g 65533 symlink test [n1]/[n3]
+#      command: sudo fstest -u 65533 -g 65533 symlink test ${n1}/${n3}
+#      compareout: "0"
+
+#    # expect "EACCES|EPERM" -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+#    - name: T7 - expect EACCES|EPERM -u 65534 -g 65534 rename [n0]/[n2] [n1]/[n3]
+#      command: sudo fstest -u 65534 -g 65534 rename ${n0}/${n2} ${n1}/${n3}
+#      compareout: "EPERM"
+#      exit: 1
+
+#    # expect 0 unlink ${n0}/${n2}
+#    - name: T7 - expect 0 unlink [n0]/[n2]
+#      command: sudo fstest unlink ${n0}/${n2}
+#      compareout: "0"
+
+#    # expect 0 unlink ${n1}/${n3}
+#    - name: T7 - expect 0 unlink [n1]/[n3]
+#      command: sudo fstest unlink ${n1}/${n3}
+#      compareout: "0"
+
+
+    # expect 0 rmdir ${n1}
+    - name: T8 - expect 0 rmdir [n1]
+      command: sudo fstest rmdir ${n1}
+      compareout: "0"
+
+    # expect 0 rmdir ${n0}
+    - name: T8 - expect 0 rmdir [n0]
+      command: sudo fstest rmdir ${n0}
+      compareout: "0"
+
+
+    # expect 0 rmdir ${n4}
+    - name: T9 - expect 0 rmdir [n4]
+      command: sudo fstest rmdir ${n4}
+      compareout: "0"

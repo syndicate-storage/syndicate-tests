@@ -1,0 +1,134 @@
+---
+
+- name: setup_symlink_03
+  type: setup
+  tmpdirs:
+    - name: 193_symlink_03_fs
+      varname: config_dir
+    - name: 193_symlink_03_fs_mount
+      varname: mount_dir
+      mode: 0755
+  randnames:
+    - test_volume
+    - test_rg
+    - test_ug
+    - test_n0
+  vars:
+    # docker allows filename max 242
+    - name: name242
+      value: _123456789_123456789_123456789_123456789_123456789_123456789_123456789_123456789_123456789_123456789_123456789_123456789_123456789_123456789_123456789_123456789_123456789_123456789_123456789_123456789_123456789_123456789_123456789_123456789_1
+    - name: n0
+      value: $mount_dir/$test_n0
+    - name: syndicate_conf
+      value: $config_dir/syndicate.conf
+    - name: rg_driver
+      value: $SYNDICATE_PYTHON_ROOT/syndicate/rg/drivers/disk
+    - name: rg_path
+      value: $SYNDICATE_RG_ROOT/syndicate-rg
+    - name: ug_path
+      value: $SYNDICATE_UG_ROOT/syndicatefs
+
+- name: config
+  type: sequential
+  tasks:
+    - name: setup
+      command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS"
+
+    - name: add test volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name=$test_volume description="test volume" blocksize=4096 email=$SYNDICATE_ADMIN
+
+    - name: create RG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_rg type=RG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
+
+    - name: update RG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_rg caps=ALL port=31112 driver=$rg_driver
+
+    - name: create UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_ug type=UG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
+
+    - name: update UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_ug caps=ALL
+
+- name: daemon UG/RG
+  type: daemon
+  tasks:
+    - name: start RG
+      command: $rg_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_rg
+      exit: 0
+
+    - name: start UG
+      command: $ug_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_ug $mount_dir
+      exit: 0
+
+- name: check syndicate is mounted
+  type: sequential
+  tasks:
+    - name: wait for syndicatefs to be mounted
+      command: sleep 5s
+
+    - name: test filesystem type
+      command: stat -f -L -c %T $mount_dir
+      compareout: "fuseblk"
+
+- name: run symlink tests 03
+  type: sequential
+  tasks:
+    # expect 0 symlink ${name242}/${name242}/${name242}/test/test_file ${n0}
+    - name: T1 - expect 0 symlink [name242]/[name242]/[name242]/test/test_file [n0]
+      command: fstest symlink $mount_dir/${name242}/${name242}/${name242}/test/test_file ${n0}
+      compareout: "0"
+
+    # expect 0 unlink ${n0}
+    - name: T1 - expect 0 unlink [n0]
+      command: fstest unlink ${n0}
+      compareout: "0"
+
+    # expect 0 mkdir ${name242} 0755
+    - name: T1 - expect 0 mkdir [name242] 0755
+      command: fstest mkdir $mount_dir/${name242} 0755
+      compareout: "0"
+
+    # expect 0 mkdir ${name242}/${name242} 0755
+    - name: T1 - expect 0 mkdir [name242]/[name242] 0755
+      command: fstest mkdir $mount_dir/${name242}/${name242} 0755
+      compareout: "0"
+
+    # expect 0 mkdir ${name242}/${name242}/${name242} 0755
+    - name: T1 - expect 0 mkdir [name242]/[name242]/[name242] 0755
+      command: fstest mkdir $mount_dir/${name242}/${name242}/${name242} 0755
+      compareout: "0"
+
+    # expect 0 mkdir ${name242}/${name242}/${name242}/test 0755
+    - name: T1 - expect 0 mkdir [name242]/[name242]/[name242]/test 0755
+      command: fstest mkdir $mount_dir/${name242}/${name242}/${name242}/test 0755
+      compareout: "0"
+
+    # expect 0 symlink ${n0} ${name242}/${name242}/${name242}/test/test_file
+    - name: T1 - expect 0 symlink [n0] [name242]/[name242]/[name242]/test/test_file
+      command: fstest symlink ${n0} $mount_dir/${name242}/${name242}/${name242}/test/test_file
+      compareout: "0"
+
+    # expect 0 unlink ${name242}/${name242}/${name242}/test/test_file
+    - name: T1 - expect 0 unlink [name242]/[name242]/[name242]/test/test_file
+      command: fstest unlink $mount_dir/${name242}/${name242}/${name242}/test/test_file
+      compareout: "0"
+
+    # expect 0 rmdir ${name242}/${name242}/${name242}/test
+    - name: T1 - expect 0 rmdir [name242]/[name242]/[name242]/test
+      command: fstest rmdir $mount_dir/${name242}/${name242}/${name242}/test
+      compareout: "0"
+
+    # expect 0 rmdir ${name242}/${name242}/${name242}
+    - name: T1 - expect 0 rmdir [name242]/[name242]/[name242]
+      command: fstest rmdir $mount_dir/${name242}/${name242}/${name242}
+      compareout: "0"
+
+    # expect 0 rmdir ${name242}/${name242}
+    - name: T1 - expect 0 rmdir [name242]/[name242]
+      command: fstest rmdir $mount_dir/${name242}/${name242}
+      compareout: "0"
+
+    # expect 0 rmdir ${name242}
+    - name: T1 - expect 0 rmdir [name242]
+      command: fstest rmdir $mount_dir/${name242}
+      compareout: "0"

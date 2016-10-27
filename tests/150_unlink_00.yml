@@ -1,0 +1,256 @@
+---
+
+- name: setup_unlink_00
+  type: setup
+  tmpdirs:
+    - name: 150_unlink_00_fs
+      varname: config_dir
+    - name: 150_unlink_00_fs_mount
+      varname: mount_dir
+      mode: 0755
+  randnames:
+    - test_volume
+    - test_rg
+    - test_ug
+    - test_n0
+    - test_n1
+    - test_n2
+  vars:
+    - name: n0
+      value: $mount_dir/$test_n0
+    - name: n1
+      value: $mount_dir/$test_n1
+    - name: n2
+      value: $test_n2
+    - name: syndicate_conf
+      value: $config_dir/syndicate.conf
+    - name: rg_driver
+      value: $SYNDICATE_PYTHON_ROOT/syndicate/rg/drivers/disk
+    - name: rg_path
+      value: $SYNDICATE_RG_ROOT/syndicate-rg
+    - name: ug_path
+      value: $SYNDICATE_UG_ROOT/syndicatefs
+
+- name: config
+  type: sequential
+  tasks:
+    - name: setup
+      command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS"
+
+    - name: add test volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name=$test_volume description="test volume" blocksize=4096 email=$SYNDICATE_ADMIN
+
+    - name: create RG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_rg type=RG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
+
+    - name: update RG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_rg caps=ALL port=31112 driver=$rg_driver
+
+    - name: create UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_ug type=UG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
+
+    - name: update UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_ug caps=ALL
+
+- name: daemon UG/RG
+  type: daemon
+  tasks:
+    - name: start RG
+      command: $rg_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_rg
+      exit: 0
+
+    - name: start UG
+      command: $ug_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_ug $mount_dir
+      exit: 0
+
+- name: check syndicate is mounted
+  type: sequential
+  tasks:
+    - name: wait for syndicatefs to be mounted
+      command: sleep 5s
+
+    - name: test filesystem type
+      command: stat -f -L -c %T $mount_dir
+      compareout: "fuseblk"
+
+- name: run unlink tests 00
+  type: sequential
+  tasks:
+    # expect 0 create ${n0} 0644
+    - name: T2 - expect 0 create [n0] 0644
+      command: fstest create ${n0} 0644
+      compareout: "0"
+
+    # expect regular lstat ${n0} type
+    - name: T2 - expect regular lstat [n0] type
+      command: fstest lstat ${n0} type
+      compareout: "regular"
+
+    # expect 0 unlink ${n0}
+    - name: T2 - expect 0 unlink [n0]
+      command: fstest unlink ${n0}
+      compareout: "0"
+
+    # expect ENOENT lstat ${n0} type
+    - name: T2 - expect ENOENT lstat [n0] type
+      command: fstest lstat ${n0} type
+      compareout: "ENOENT"
+      exit: 1
+
+
+#    # expect 0 symlink ${n1} ${n0}
+#    - name: T3 - expect 0 symlink [n1] [n0]
+#      command: fstest symlink ${n1} ${n0}
+#      compareout: "0"
+
+#    # expect symlink lstat ${n0} type
+#    - name: T3 - expect symlink lstat [n0] type
+#      command: fstest lstat ${n0} type
+#      compareout: "symlink"
+
+#    # expect 0 unlink ${n0}
+#    - name: T3 - expect 0 unlink [n0]
+#      command: fstest unlink ${n0}
+#      compareout: "0"
+
+#    # expect ENOENT lstat ${n0} type
+#    - name: T3 - expect ENOENT lstat [n0] type
+#      command: fstest lstat ${n0} type
+#      compareout: "ENOENT"
+#      exit: 1
+
+    # unsuccessful unlink(2) does not update ctime.
+    # expect 0 create ${n0} 0644
+    - name: T8 - expect 0 create [n0] 0644
+      command: fstest create ${n0} 0644
+      compareout: "0"
+
+    # ctime1=`${fstest} stat ${n0} ctime`
+    - name: T8 - ctime1=`[fstest] stat [n0] ctime`
+      command: fstest stat ${n0} ctime
+      saveout: $config_dir/8_ctime1
+
+    # sleep 1
+    - name: T8 - sleep 1
+      command: sleep 1s
+
+    # expect EACCES -u 65534 unlink ${n0}
+    - name: T8 - expect EACCES -u 65534 unlink [n0]
+      command: sudo fstest -u 65534 unlink ${n0}
+      compareout: "EACCES"
+      exit: 1
+
+    # ctime2=`${fstest} stat ${n0} ctime`
+    - name: T8 - ctime2=`[fstest] stat [n0] ctime`
+      command: fstest stat ${n0} ctime
+      saveout: $config_dir/8_ctime2
+
+    # test_check $ctime1 -eq $ctime2
+    - name: T8 - test_check [ctime1] -eq [ctime2]
+      command: $tasksf_dir/cmptimestamps.py eq -f $config_dir/8_ctime1 $config_dir/8_ctime2
+      exit: 0
+
+    # expect 0 unlink ${n0}
+    - name: T8 - expect 0 unlink [n0]
+      command: fstest unlink ${n0}
+      compareout: "0"
+
+
+    # expect 0 mkdir ${n0} 0755
+    - name: T10 - expect 0 mkdir [n0] 0755
+      command: fstest mkdir ${n0} 0755
+      compareout: "0"
+
+    # expect 0 create ${n0}/${n2} 0644
+    - name: T10 - expect 0 create [n0]/[n2] 0644
+      command: fstest create ${n0}/${n2} 0644
+      compareout: "0"
+
+    # time=`${fstest} stat ${n0} ctime`
+    - name: T10 - time=`[fstest] stat [n0] ctime`
+      command: fstest stat ${n0} ctime
+      saveout: $config_dir/10_time
+
+    # sleep 1
+    - name: T10 - sleep 1
+      command: sleep 1s
+
+    # expect 0 unlink ${n0}/${n2}
+    - name: T10 - expect 0 unlink [n0]/[n2]
+      command: fstest unlink ${n0}/${n2}
+      compareout: "0"
+
+    # mtime=`${fstest} stat ${n0} mtime`
+    - name: T10 - time=`[fstest] stat [n0] mtime`
+      command: fstest stat ${n0} mtime
+      saveout: $config_dir/10_mtime
+
+    # test_check $time -lt $mtime
+    - name: T10 - test_check [time] -lt [mtime]
+      command: $tasksf_dir/cmptimestamps.py lt -f $config_dir/10_time $config_dir/10_mtime
+      exit: 0
+
+    # ctime=`${fstest} stat ${n0} ctime`
+    - name: T10 - ctime=`[fstest] stat [n0] ctime`
+      command: fstest stat ${n0} ctime
+      saveout: $config_dir/10_ctime
+
+    # test_check $time -lt $ctime
+    - name: T10 - test_check [time] -lt [ctime]
+      command: $tasksf_dir/cmptimestamps.py lt -f $config_dir/10_time $config_dir/10_ctime
+      exit: 0
+
+    # expect 0 rmdir ${n0}
+    - name: T10 - expect 0 rmdir [n0]
+      command: fstest rmdir ${n0}
+      compareout: "0"
+
+
+#    # expect 0 mkdir ${n0} 0755
+#    - name: T12 - expect 0 mkdir [n0] 0755
+#      command: fstest mkdir ${n0} 0755
+#      compareout: "0"
+
+#    # expect 0 symlink test ${n0}/${n2}
+#    - name: T12 - expect 0 symlink test [n0]/[n2]
+#      command: fstest symlink test ${n0}/${n2}
+#      compareout: "0"
+
+#    # time=`${fstest} stat ${n0} ctime`
+#    - name: T12 - time=`[fstest] stat [n0] ctime`
+#      command: fstest stat ${n0} ctime
+#      saveout: $config_dir/12_time
+
+#    # sleep 1
+#    - name: T12 - sleep 1
+#      command: sleep 1s
+
+#    # expect 0 unlink ${n0}/${n2}
+#    - name: T12 - expect 0 unlink [n0]/[n2]
+#      command: fstest unlink ${n0}/${n2}
+#      compareout: "0"
+
+#    #mtime=`${fstest} stat ${n0} mtime`
+#    - name: T12 - mtime=`[fstest] stat [n0] mtime`
+#      command: fstest stat ${n0} mtime
+#      saveout: $config_dir/12_mtime
+
+#    # test_check $time -lt $mtime
+#    - name: T12 - test_check [time] -lt [mtime]
+#      command: $tasksf_dir/cmptimestamps.py lt -f $config_dir/12_time $config_dir/12_mtime
+#      exit: 0
+
+#    # ctime=`${fstest} stat ${n0} ctime`
+#    - name: T12 - ctime=`[fstest] stat [n0] ctime`
+#      command: fstest stat ${n0} ctime
+#      saveout: $config_dir/12_ctime
+
+#    # test_check $time -lt $ctime
+#    - name: T12 - test_check [time] -lt [ctime]
+#      command: $tasksf_dir/cmptimestamps.py lt -f $config_dir/12_time $config_dir/12_ctime
+#      exit: 0
+
+#    # expect 0 rmdir ${n0}
+#    - name: T12 - expect 0 rmdir [n0]
+#      command: fstest rmdir ${n0}
+#      compareout: "0"

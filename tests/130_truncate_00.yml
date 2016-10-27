@@ -1,0 +1,204 @@
+---
+
+- name: setup_truncate_00
+  type: setup
+  tmpdirs:
+    - name: 130_truncate_00_fs
+      varname: config_dir
+    - name: 130_truncate_00_fs_mount
+      varname: mount_dir
+      mode: 0755
+  randnames:
+    - test_volume
+    - test_rg
+    - test_ug
+    - test_n0
+  vars:
+    - name: n0
+      value: $mount_dir/$test_n0
+    - name: syndicate_conf
+      value: $config_dir/syndicate.conf
+    - name: rg_driver
+      value: $SYNDICATE_PYTHON_ROOT/syndicate/rg/drivers/disk
+    - name: rg_path
+      value: $SYNDICATE_RG_ROOT/syndicate-rg
+    - name: ug_path
+      value: $SYNDICATE_UG_ROOT/syndicatefs
+
+- name: config
+  type: sequential
+  tasks:
+    - name: setup
+      command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS"
+
+    - name: add test volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name=$test_volume description="test volume" blocksize=4096 email=$SYNDICATE_ADMIN
+
+    - name: create RG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_rg type=RG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
+
+    - name: update RG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_rg caps=ALL port=31112 driver=$rg_driver
+
+    - name: create UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_ug type=UG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
+
+    - name: update UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_ug caps=ALL
+
+- name: daemon UG/RG
+  type: daemon
+  tasks:
+    - name: start RG
+      command: $rg_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_rg
+      exit: 0
+
+    - name: start UG
+      command: $ug_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_ug $mount_dir
+      exit: 0
+
+- name: check syndicate is mounted
+  type: sequential
+  tasks:
+    - name: wait for syndicatefs to be mounted
+      command: sleep 5s
+
+    - name: test filesystem type
+      command: stat -f -L -c %T $mount_dir
+      compareout: "fuseblk"
+
+- name: run truncate tests 00
+  type: sequential
+  tasks:
+    # expect 0 create ${n0} 0644
+    - name: T2 - expect 0 create [n0] 0644
+      command: fstest create ${n0} 0644
+      compareout: "0"
+
+    # expect 0 truncate ${n0} 1234567
+    - name: T2 - expect 0 truncate [n0] 1234567
+      command: fstest truncate ${n0} 1234567
+      compareout: "0"
+
+    # expect 1234567 lstat ${n0} size
+    - name: T2 - expect 1234567 lstat [n0] size
+      command: fstest lstat ${n0} size
+      compareout: "1234567"
+
+    # expect 0 truncate ${n0} 567
+    - name: T2 - expect 0 truncate [n0] 567
+      command: fstest truncate ${n0} 567
+      compareout: "0"
+
+    # expect 567 lstat ${n0} size
+    - name: T2 - expect 567 lstat [n0] size
+      command: fstest lstat ${n0} size
+      compareout: "567"
+
+    # expect 0 unlink ${n0}
+    - name: T2 - expect 0 unlink [n0]
+      command: fstest unlink ${n0}
+      compareout: "0"
+
+
+    # dd if=/dev/random of=${n0} bs=12345 count=1 >/dev/null 2>&1
+    - name: "T3 - dd if=/dev/random of=[n0] bs=12345 count=1 >/dev/null 2>&1"
+      shell: "dd if=/dev/random of=${n0} bs=12345 count=1 >/dev/null 2>&1"
+
+    # expect 0 truncate ${n0} 23456
+    - name: T3 - expect 0 truncate [n0] 23456
+      command: fstest truncate ${n0} 23456
+      compareout: "0"
+
+    # expect 23456 lstat ${n0} size
+    - name: T3 - expect 23456 lstat [n0] size
+      command: fstest lstat ${n0} size
+      compareout: "23456"
+
+    # expect 0 truncate ${n0} 1
+    - name: T3 - expect 0 truncate [n0] 1
+      command: fstest truncate ${n0} 1
+      compareout: "0"
+
+    # expect 1 lstat ${n0} size
+    - name: T3 - expect 1 lstat [n0] size
+      command: fstest lstat ${n0} size
+      compareout: "1"
+
+    # expect 0 unlink ${n0}
+    - name: T3 - expect 0 unlink [n0]
+      command: fstest unlink ${n0}
+      compareout: "0"
+
+
+    # successful truncate(2) updates mtime.
+    # expect 0 create ${n0} 0644
+    - name: T4 - expect 0 create [n0] 0644
+      command: fstest create ${n0} 0644
+      compareout: "0"
+
+    # ctime=`${fstest} stat ${n0} ctime`
+    - name: T4 - ctime=`[fstest] stat [n0] ctime`
+      command: fstest stat ${n0} ctime
+      saveout: $config_dir/4_ctime
+
+    # sleep 1
+    - name: T4 - sleep 1
+      command: sleep 1s
+
+    # expect 0 truncate ${n0} 123
+    - name: T4 - expect 0 truncate [n0] 123
+      command: fstest truncate ${n0} 123
+      compareout: "0"
+
+    # mtime=`${fstest} stat ${n0} mtime`
+    - name: T4 - mtime=`[fstest] stat [n0] mtime`
+      command: fstest stat ${n0} mtime
+      saveout: $config_dir/4_mtime
+
+    # test_check $ctime -lt $mtime
+    - name: T4 - test_check [ctime] -lt [mtime]
+      command: $tasksf_dir/cmptimestamps.py lt -f $config_dir/4_ctime $config_dir/4_mtime
+      exit: 0
+
+    # expect 0 unlink ${n0}
+    - name: T4 - expect 0 unlink [n0]
+      command: fstest unlink ${n0}
+      compareout: "0"
+
+
+    # unsuccessful truncate(2) does not update mtime.
+    # expect 0 create ${n0} 0644
+    - name: T5 - expect 0 create [n0] 0644
+      command: fstest create ${n0} 0644
+      compareout: "0"
+
+    # mtime1=`${fstest} stat ${n0} mtime`
+    - name: T5 - mtime1=`[fstest] stat [n0] mtime`
+      command: fstest stat ${n0} mtime
+      saveout: $config_dir/5_mtime1
+
+    # sleep 1
+    - name: T5 - sleep 1
+      command: sleep 1s
+
+    # expect EACCES -u 65534 truncate ${n0} 123
+    - name: T5 - expect EACCES -u 65534 truncate [n0] 123
+      command: sudo fstest -u 65534 truncate ${n0} 123
+      compareout: "EACCES"
+      exit: 1
+
+    # mtime2=`${fstest} stat ${n0} mtime`
+    - name: T5 - mtime2=`[fstest] stat [n0] mtime`
+      command: fstest stat ${n0} mtime
+      saveout: $config_dir/5_mtime2
+
+    # test_check $mtime1 -eq $mtime2
+    - name: T5 - test_check [mtime1] -eq [mtime2]
+      command: $tasksf_dir/cmptimestamps.py eq -f $config_dir/5_mtime1 $config_dir/5_mtime2
+      exit: 0
+
+    # expect 0 unlink ${n0}
+    - name: T5 - expect 0 unlink [n0]
+      command: fstest unlink ${n0}
+      compareout: "0"

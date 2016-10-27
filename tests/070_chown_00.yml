@@ -1,0 +1,1011 @@
+---
+
+- name: setup_chown_00
+  type: setup
+  tmpdirs:
+    - name: 070_chown_00_fs
+      varname: config_dir
+    - name: 070_chown_00_fs_mount
+      varname: mount_dir
+      mode: 0755
+  randnames:
+    - test_volume
+    - test_rg
+    - test_ug
+  vars:
+    - name: n0
+      value: $mount_dir/n0
+    - name: n1
+      value: $mount_dir/n1
+    - name: syndicate_conf
+      value: $config_dir/syndicate.conf
+    - name: rg_driver
+      value: $SYNDICATE_PYTHON_ROOT/syndicate/rg/drivers/disk
+    - name: rg_path
+      value: $SYNDICATE_RG_ROOT/syndicate-rg
+    - name: ug_path
+      value: $SYNDICATE_UG_ROOT/syndicatefs
+
+- name: config
+  type: sequential
+  tasks:
+    - name: setup
+      command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS"
+
+    - name: add test volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name=$test_volume description="test volume" blocksize=4096 email=$SYNDICATE_ADMIN
+
+    - name: create RG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_rg type=RG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
+
+    - name: update RG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_rg caps=ALL port=31112 driver=$rg_driver
+
+    - name: create UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_ug type=UG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
+
+    - name: update UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_ug caps=ALL
+
+- name: daemon UG/RG
+  type: daemon
+  tasks:
+    - name: start RG
+      command: $rg_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_rg
+      exit: 0
+
+    - name: start UG
+      command: $ug_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_ug $mount_dir
+      exit: 0
+
+- name: check syndicate is mounted
+  type: sequential
+  tasks:
+    - name: wait for syndicatefs to be mounted
+      command: sleep 5s
+
+    - name: test filesystem type
+      command: stat -f -L -c %T $mount_dir
+      compareout: "fuseblk"
+
+- name: run chown tests 00
+  type: sequential
+  tasks:
+    # super-user can always modify ownership
+    # 2
+    # expect 0 create ${n0} 0644
+    - name: T1 - expect 0 create [n0] 0644
+      command: fstest create ${n0} 0644
+      compareout: "0"
+
+    # expect 0 chown ${n0} 123 456
+    - name: T1 - expect 0 chown [n0] 123 456
+      command: sudo fstest chown ${n0} 123 456
+      compareout: "0"
+
+    # expect 123,456 lstat ${n0} uid,gid
+    - name: T1 - expect 123,456 lstat [n0] uid,gid
+      command: fstest lstat ${n0} uid,gid
+      compareout: "123,456"
+
+    # expect 0 chown ${n0} 0 0
+    - name: T1 - expect 0 chown [n0] 0 0
+      command: sudo fstest chown ${n0} 0 0
+      compareout: "0"
+
+    # expect 0,0 lstat ${n0} uid,gid
+    - name: T1 - expect 0,0 lstat [n0] uid,gid
+      command: fstest lstat ${n0} uid,gid
+      compareout: "0,0"
+
+    # expect 0 unlink ${n0}
+    - name: T1 - expect 0 unlink [n0]
+      command: sudo fstest unlink ${n0}
+      compareout: "0"
+
+
+    # 14
+    # expect 0 mkdir ${n0} 0755
+    - name: T2 - expect 0 mkdir [n0] 0755
+      command: fstest mkdir ${n0} 0755
+      compareout: "0"
+
+    # expect 0 chown ${n0} 123 456
+    - name: T2 - expect 0 chown [n0] 123 456
+      command: sudo fstest chown ${n0} 123 456
+      compareout: "0"
+
+    # expect 123,456 lstat ${n0} uid,gid
+    - name: T2 - expect 123,456 lstat [n0] uid,gid
+      command: fstest lstat ${n0} uid,gid
+      compareout: "123,456"
+
+    # expect 0 chown ${n0} 0 0
+    - name: T2 - expect 0 chown [n0] 0 0
+      command: sudo fstest chown ${n0} 0 0
+      compareout: "0"
+
+    # expect 0,0 lstat ${n0} uid,gid
+    - name: T2 - expect 0,0 lstat [n0] uid,gid
+      command: fstest lstat ${n0} uid,gid
+      compareout: "0,0"
+
+    # expect 0 rmdir ${n0}
+    - name: T2 - expect 0 rmdir [n0]
+      command: sudo fstest rmdir ${n0}
+      compareout: "0"
+
+
+    # 20
+#    # expect 0 create ${n0} 0644
+#    - name: T3 - expect 0 create [n0] 0644
+#      command: fstest create ${n0} 0644
+#      compareout: "0"
+
+#    # expect 0 symlink ${n0} ${n1}
+#    - name: T3 - expect 0 symlink [n0] [n1]
+#      command: fstest symlink ${n0} ${n1}
+#      compareout: "0"
+
+#    # expect 0 chown ${n1} 123 456
+#    - name: T3 - expect 0 chown [n1] 123 456
+#      command: sudo fstest chown ${n1} 123 456
+#      compareout: "0"
+
+#    # expect 123,456 stat ${n1} uid,gid
+#    - name: T3 - expect 123,456 stat [n1] uid,gid
+#      command: fstest stat ${n1} uid,gid
+#      compareout: "123,456"
+
+#    # expect 123,456 stat ${n0} uid,gid
+#    - name: T3 - expect 123,456 stat [n0] uid,gid
+#      command: fstest stat ${n0} uid,gid
+#      compareout: "123,456"
+
+#    # expect 0 lchown ${n1} 135 579
+#    - name: T3 - expect 0 lchown [n1] 135 579
+#      command: sudo fstest lchown ${n1} 135 579
+#      compareout: "0"
+
+#    # expect 135,579 lstat ${n1} uid,gid
+#    - name: T3 - expect 135,579 lstat [n1] uid,gid
+#      command: fstest lstat ${n1} uid,gid
+#      compareout: "135,579"
+
+#    # expect 123,456 stat ${n1} uid,gid
+#    - name: T3 - expect 123,456 stat [n1] uid,gid
+#      command: fstest stat ${n1} uid,gid
+#      compareout: "123,456"
+
+#    # expect 123,456 stat ${n0} uid,gid
+#    - name: T3 - expect 123,456 stat [n0] uid,gid
+#      command: fstest stat ${n0} uid,gid
+#      compareout: "123,456"
+
+#    # expect 0 unlink ${n0}
+#    - name: T3 - expect 0 unlink [n0]
+#      command: sudo fstest unlink ${n0}
+#      compareout: "0"
+
+#    # expect 0 unlink ${n1}
+#    - name: T3 - expect 0 unlink [n1]
+#      command: sudo fstest unlink ${n1}
+#      compareout: "0"
+
+
+    # non-super-user can modify file group if he is owner of a file and
+    # gid he is setting is in his groups list.
+    # 31
+    # expect 0 create ${n0} 0644
+    - name: T4 - expect 0 create [n0] 0644
+      command: fstest create ${n0} 0644
+      compareout: "0"
+
+    # expect 0 chown ${n0} 65534 65533
+    - name: T4 - expect 0 chown [n0] 65534 65533
+      command: sudo fstest chown ${n0} 65534 65533
+      compareout: "0"
+
+    # expect 65534,65533 lstat ${n0} uid,gid
+    - name: T4 - expect 65534,65533 lstat [n0] uid,gid
+      command: fstest lstat ${n0} uid,gid
+      compareout: "65534,65533"
+
+    # expect 0 -u 65534 -g 65532,65531 -- chown ${n0} -1 65532
+    - name: T4 - expect 0 -u 65534 -g 65532,65531 -- chown [n0] -1 65532
+      command: sudo fstest -u 65534 -g 65532,65531 -- chown ${n0} -1 65532
+      compareout: "0"
+
+    # expect 65534,65532 lstat ${n0} uid,gid
+    - name: T4 - expect 65534,65532 lstat [n0] uid,gid
+      command: fstest lstat ${n0} uid,gid
+      compareout: "65534,65532"
+
+    # expect 0 -u 65534 -g 65532,65531 chown ${n0} 65534 65531
+    - name: T4 - expect 0 -u 65534 -g 65532,65531 chown [n0] 65534 65531
+      command: sudo fstest -u 65534 -g 65532,65531 chown ${n0} 65534 65531
+      compareout: "0"
+
+    # expect 65534,65531 lstat ${n0} uid,gid
+    - name: T4 - expect 65534,65531 lstat [n0] uid,gid
+      command: fstest lstat ${n0} uid,gid
+      compareout: "65534,65531"
+
+    # expect 0 unlink ${n0}
+    - name: T4 - expect 0 unlink [n0]
+      command: sudo fstest unlink ${n0}
+      compareout: "0"
+
+
+    # chown(2) return 0 if user is not owner of a file, but chown(2) is called
+    # with both uid and gid equal to -1.
+    # 39
+    # expect 0 create ${n0} 0644
+    - name: T5 - expect 0 create [n0] 0644
+      command: fstest create ${n0} 0644
+      compareout: "0"
+
+    # expect 0 chown ${n0} 65534 65533
+    - name: T5 - expect 0 chown [n0] 65534 65533
+      command: sudo fstest chown ${n0} 65534 65533
+      compareout: "0"
+
+    # expect 0 -u 65532 -g 65531 -- chown ${n0} -1 -1
+    - name: T5 - expect 0 -u 65532 -g 65531 -- chown [n0] -1 -1
+      command: sudo fstest -u 65532 -g 65531 -- chown ${n0} -1 -1
+      compareout: "0"
+
+    # expect 0 unlink ${n0}
+    - name: T5 - expect 0 unlink [n0]
+      command: sudo fstest unlink ${n0}
+      compareout: "0"
+
+
+    # when super-user calls chown(2), set-uid and set-gid bits are not removed.
+    # 43
+    # expect 0 create ${n0} 0644
+    - name: T6 - expect 0 create [n0] 0644
+      command: fstest create ${n0} 0644
+      compareout: "0"
+
+    # expect 0 chown ${n0} 65534 65533
+    - name: T6 - expect 0 chown [n0] 65534 65533
+      command: sudo fstest chown ${n0} 65534 65533
+      compareout: "0"
+
+    # expect 0 chmod ${n0} 06555
+    - name: T6 - expect 0 chmod [n0] 06555
+      command: sudo fstest chmod ${n0} 06555
+      compareout: "0"
+
+    # expect 06555 lstat ${n0} mode
+    - name: T6 - expect 06555 lstat [n0] mode
+      command: fstest lstat ${n0} mode
+      compareout: "06555"
+
+    # expect 0 chown ${n0} 65532 65531
+    - name: T6 - expect 0 chown [n0] 65532 65531
+      command: sudo fstest chown ${n0} 65532 65531
+      compareout: "0"
+
+    # expect 0555 lstat ${n0} mode
+    - name: T6 - expect 0555 lstat [n0] mode
+      command: fstest lstat ${n0} mode
+      compareout: "0555"
+
+    # expect 0 unlink ${n0}
+    - name: T6 - expect 0 unlink [n0]
+      command: sudo fstest unlink ${n0}
+      compareout: "0"
+
+
+    # 50
+    # expect 0 create ${n0} 0644
+    - name: T7 - expect 0 create [n0] 0644
+      command: fstest create ${n0} 0644
+      compareout: "0"
+
+    # expect 0 chown ${n0} 0 0
+    - name: T7 - expect 0 chown [n0] 0 0
+      command: sudo fstest chown ${n0} 0 0
+      compareout: "0"
+
+    # expect 0 chmod ${n0} 06555
+    - name: T7 - expect 0 chmod [n0] 06555
+      command: sudo fstest chmod ${n0} 06555
+      compareout: "0"
+
+    # expect 06555 lstat ${n0} mode
+    - name: T7 - expect 06555 lstat [n0] mode
+      command: fstest lstat ${n0} mode
+      compareout: "06555"
+
+    # expect 0 chown ${n0} 65534 65533
+    - name: T7 - expect 0 chown [n0] 65534 65533
+      command: sudo fstest chown ${n0} 65534 65533
+      compareout: "0"
+
+    # expect 0555 lstat ${n0} mode
+    - name: T7 - expect 0555 lstat [n0] mode
+      command: fstest lstat ${n0} mode
+      compareout: "0555"
+
+    # expect 0 unlink ${n0}
+    - name: T7 - expect 0 unlink [n0]
+      command: sudo fstest unlink ${n0}
+      compareout: "0"
+
+
+    # 57
+    # expect 0 create ${n0} 0644
+    - name: T8 - expect 0 create [n0] 0644
+      command: fstest create ${n0} 0644
+      compareout: "0"
+
+    # expect 0 chown ${n0} 65534 65533
+    - name: T8 - expect 0 chown [n0] 65534 65533
+      command: sudo fstest chown ${n0} 65534 65533
+      compareout: "0"
+
+    # expect 0 chmod ${n0} 06555
+    - name: T8 - expect 0 chmod [n0] 06555
+      command: sudo fstest chmod ${n0} 06555
+      compareout: "0"
+
+    # expect 06555 lstat ${n0} mode
+    - name: T8 - expect 06555 lstat [n0] mode
+      command: fstest lstat ${n0} mode
+      compareout: "06555"
+
+    # expect 0 chown ${n0} 0 0
+    - name: T8 - expect 0 chown [n0] 0 0
+      command: sudo fstest chown ${n0} 0 0
+      compareout: "0"
+
+    # expect 0555 lstat ${n0} mode
+    - name: T8 - expect 0555 lstat [n0] mode
+      command: fstest lstat ${n0} mode
+      compareout: "0555"
+
+    # expect 0 unlink ${n0}
+    - name: T8 - expect 0 unlink [n0]
+      command: sudo fstest unlink ${n0}
+      compareout: "0"
+
+
+    # when non-super-user calls chown(2) successfully, set-uid and set-gid bits are
+    # removed, except when both uid and gid are equal to -1.
+    # 64
+    # expect 0 create ${n0} 0644
+    - name: T9 - expect 0 create [n0] 0644
+      command: fstest create ${n0} 0644
+      compareout: "0"
+
+    # expect 0 chown ${n0} 65534 65533
+    - name: T9 - expect 0 chown [n0] 65534 65533
+      command: sudo fstest chown ${n0} 65534 65533
+      compareout: "0"
+
+    # expect 0 chmod ${n0} 06555
+    - name: T9 - expect 0 chmod [n0] 06555
+      command: sudo fstest chmod ${n0} 06555
+      compareout: "0"
+
+    # expect 06555 lstat ${n0} mode
+    - name: T9 - expect 06555 lstat [n0] mode
+      command: fstest lstat ${n0} mode
+      compareout: "06555"
+
+    # expect 0 -u 65534 -g 65533,65532 chown ${n0} 65534 65532
+    - name: T9 - expect 0 -u 65534 -g 65533,65532 chown [n0] 65534 65532
+      command: sudo fstest -u 65534 -g 65533,65532 chown ${n0} 65534 65532
+      compareout: "0"
+
+    # expect 0555,65534,65532 lstat ${n0} mode,uid,gid
+    - name: T9 - expect 0555,65534,65532 lstat [n0] mode,uid,gid
+      command: fstest lstat ${n0} mode,uid,gid
+      compareout: "0555,65534,65532"
+
+    # expect 0 chmod ${n0} 06555
+    - name: T9 - expect 0 chmod [n0] 06555
+      command: sudo fstest chmod ${n0} 06555
+      compareout: "0"
+
+    # expect 06555 lstat ${n0} mode
+    - name: T9 - expect 06555 lstat [n0] mode
+      command: fstest lstat ${n0} mode
+      compareout: "06555"
+
+    # expect 0 -u 65534 -g 65533,65532 -- chown ${n0} -1 65533
+    - name: T9 - expect 0 -u 65534 -g 65533,65532 -- chown [n0] -1 65533
+      command: sudo fstest -u 65534 -g 65533,65532 -- chown ${n0} -1 65533
+      compareout: "0"
+
+    # expect 0555,65534,65533 lstat ${n0} mode,uid,gid
+    - name: T9 - expect 0555,65534,65533 lstat [n0] mode,uid,gid
+      command: fstest lstat ${n0} mode,uid,gid
+      compareout: "0555,65534,65533"
+
+    # expect 0 chmod ${n0} 06555
+    - name: T9 - expect 0 chmod [n0] 06555
+      command: sudo fstest chmod ${n0} 06555
+      compareout: "0"
+
+    # expect 06555 lstat ${n0} mode
+    - name: T9 - expect 06555 lstat [n0] mode
+      command: fstest lstat ${n0} mode
+      compareout: "06555"
+
+    # expect 0 -u 65534 -g 65533,65532 -- chown ${n0} -1 -1
+    - name: T9 - expect 0 -u 65534 -g 65533,65532 -- chown [n0] -1 -1
+      command: sudo fstest -u 65534 -g 65533,65532 -- chown ${n0} -1 -1
+      compareout: "0"
+
+    # expect 0555,65534,65533 lstat ${n0} mode,uid,gid
+    - name: T9 - expect 0555,65534,65533 lstat [n0] mode,uid,gid
+      command: fstest lstat ${n0} mode,uid,gid
+      compareout: "0555,65534,65533"
+
+    # expect 0 unlink ${n0}
+    - name: T9 - expect 0 unlink [n0]
+      command: sudo fstest unlink ${n0}
+      compareout: "0"
+
+
+    # 79
+    # expect 0 mkdir ${n0} 0755
+    - name: T10 - expect 0 mkdir [n0] 0755
+      command: fstest mkdir ${n0} 0755
+      compareout: "0"
+
+    # expect 0 chown ${n0} 65534 65533
+    - name: T10 - expect 0 chown [n0] 65534 65533
+      command: sudo fstest chown ${n0} 65534 65533
+      compareout: "0"
+
+    # expect 0 chmod ${n0} 06555
+    - name: T10 - expect 0 chmod [n0] 06555
+      command: sudo fstest chmod ${n0} 06555
+      compareout: "0"
+
+    # expect 06555 lstat ${n0} mode
+    - name: T10 - expect 06555 lstat [n0] mode
+      command: fstest lstat ${n0} mode
+      compareout: "06555"
+
+    # expect 0 -u 65534 -g 65533,65532 chown ${n0} 65534 65532
+    - name: T10 - expect 0 -u 65534 -g 65533,65532 chown [n0] 65534 65532
+      command: sudo fstest -u 65534 -g 65533,65532 chown ${n0} 65534 65532
+      compareout: "0"
+
+    # expect 06555,65534,65532 lstat ${n0} mode,uid,gid
+    - name: T10 - expect 06555,65534,65532 lstat [n0] mode,uid,gid
+      command: fstest lstat ${n0} mode,uid,gid
+      compareout: "06555,65534,65532"
+
+    # expect 0 chmod ${n0} 06555
+    - name: T10 - expect 0 chmod [n0] 06555
+      command: sudo fstest chmod ${n0} 06555
+      compareout: "0"
+
+    # expect 06555 lstat ${n0} mode
+    - name: T10 - expect 06555 lstat [n0] mode
+      command: fstest lstat ${n0} mode
+      compareout: "06555"
+
+    # expect 0 -u 65534 -g 65533,65532 -- chown ${n0} -1 65533
+    - name: T10 - expect 0 -u 65534 -g 65533,65532 -- chown [n0] -1 65533
+      command: sudo fstest -u 65534 -g 65533,65532 -- chown ${n0} -1 65533
+      compareout: "0"
+
+    # expect 06555,65534,65533 lstat ${n0} mode,uid,gid
+    - name: T10 - expect 06555,65534,65533 lstat [n0] mode,uid,gid
+      command: fstest lstat ${n0} mode,uid,gid
+      compareout: "06555,65534,65533"
+
+    # expect 0 chmod ${n0} 06555
+    - name: T10 - expect 0 chmod [n0] 06555
+      command: sudo fstest chmod ${n0} 06555
+      compareout: "0"
+
+    # expect 06555 lstat ${n0} mode
+    - name: T10 - expect 06555 lstat [n0] mode
+      command: fstest lstat ${n0} mode
+      compareout: "06555"
+
+    # expect 0 -u 65534 -g 65533,65532 -- chown ${n0} -1 -1
+    - name: T10 - expect 0 -u 65534 -g 65533,65532 -- chown [n0] -1 -1
+      command: sudo fstest -u 65534 -g 65533,65532 -- chown ${n0} -1 -1
+      compareout: "0"
+
+    # expect 06555,65534,65533 lstat ${n0} mode,uid,gid
+    - name: T10 - expect 06555,65534,65533 lstat [n0] mode,uid,gid
+      command: fstest lstat ${n0} mode,uid,gid
+      compareout: "06555,65534,65533"
+
+    # expect 0 rmdir ${n0}
+    - name: T10 - expect 0 rmdir [n0]
+      command: sudo fstest rmdir ${n0}
+      compareout: "0"
+
+
+    # successfull chown(2) call (except uid and gid equal to -1) updates ctime.
+    # 109
+    # expect 0 create ${n0} 0644
+    - name: T11 - expect 0 create [n0] 0644
+      command: fstest create ${n0} 0644
+      compareout: "0"
+
+    # ctime1=`${fstest} stat ${n0} ctime`
+    - name: T11 - ctime1=`[fstest] stat [n0] ctime`
+      command: fstest stat ${n0} ctime
+      saveout: $config_dir/11_ctime1
+
+    # sleep 1
+    - name: T11 - sleep 1
+      command: sleep 1s
+
+    # expect 0 chown ${n0} 65534 65533
+    - name: T11 - expect 0 chown [n0] 65534 65533
+      command: sudo fstest chown ${n0} 65534 65533
+      compareout: "0"
+
+    # expect 65534,65533 lstat ${n0} uid,gid
+    - name: T11 - expect 65534,65533 lstat [n0] uid,gid
+      command: fstest lstat ${n0} uid,gid
+      compareout: "65534,65533"
+
+    # ctime2=`${fstest} stat ${n0} ctime`
+    - name: T11 - ctime2=`[fstest] stat [n0] ctime`
+      command: fstest stat ${n0} ctime
+      saveout: $config_dir/11_ctime2
+
+    # test_check $ctime1 -lt $ctime2
+    - name: T11 - test_check [ctime1] -lt [ctime2]
+      command: $tasksf_dir/cmptimestamps.py lt -f $config_dir/11_ctime1 $config_dir/11_ctime2
+      exit: 0
+
+    # expect 0 unlink ${n0}
+    - name: T11 - expect 0 unlink [n0]
+      command: sudo fstest unlink ${n0}
+      compareout: "0"
+
+
+    # 114
+    # expect 0 mkdir ${n0} 0755
+    - name: T12 - expect 0 mkdir [n0] 0755
+      command: fstest mkdir ${n0} 0755
+      compareout: "0"
+
+    # ctime1=`${fstest} stat ${n0} ctime`
+    - name: T12 - ctime1=`[fstest] stat [n0] ctime`
+      command: fstest stat ${n0} ctime
+      saveout: $config_dir/12_ctime1
+
+    # sleep 1
+    - name: T12 - sleep 1
+      command: sleep 1s
+
+    # expect 0 chown ${n0} 65534 65533
+    - name: T12 - expect 0 chown [n0] 65534 65533
+      command: sudo fstest chown ${n0} 65534 65533
+      compareout: "0"
+
+    # expect 65534,65533 lstat ${n0} uid,gid
+    - name: T12 - expect 65534,65533 lstat [n0] uid,gid
+      command: fstest lstat ${n0} uid,gid
+      compareout: "65534,65533"
+
+    # ctime2=`${fstest} stat ${n0} ctime`
+    - name: T12 - ctime2=`[fstest] stat [n0] ctime`
+      command: fstest stat ${n0} ctime
+      saveout: $config_dir/12_ctime2
+
+    # test_check $ctime1 -lt $ctime2
+    - name: T12 - test_check [ctime1] -lt [ctime2]
+      command: $tasksf_dir/cmptimestamps.py lt -f $config_dir/12_ctime1 $config_dir/12_ctime2
+      exit: 0
+
+    # expect 0 rmdir ${n0}
+    - name: T12 - expect 0 rmdir [n0]
+      command: sudo fstest rmdir ${n0}
+      compareout: "0"
+
+
+    # 124
+#    # expect 0 symlink ${n1} ${n0}
+#    - name: T13 - expect 0 symlink [n1] [n0]
+#      command: fstest symlink ${n1} ${n0}
+#      compareout: "0"
+
+#    # ctime1=`${fstest} lstat ${n0} ctime`
+#    - name: T13 - ctime1=`[fstest] lstat [n0] ctime`
+#      command: fstest lstat ${n0} ctime
+#      saveout: $config_dir/13_ctime1
+
+#    # sleep 1
+#    - name: T13 - sleep 1
+#      command: sleep 1s
+
+#    # expect 0 lchown ${n0} 65534 65533
+#    - name: T13 - expect 0 lchown [n0] 65534 65533
+#      command: sudo fstest lchown ${n0} 65534 65533
+#      compareout: "0"
+
+#    # expect 65534,65533 lstat ${n0} uid,gid
+#    - name: T13 - expect 65534,65533 lstat [n0] uid,gid
+#      command: fstest lstat ${n0} uid,gid
+#      compareout: "65534,65533"
+
+#    # ctime2=`${fstest} lstat ${n0} ctime`
+#    - name: T13 - ctime2=`[fstest] lstat [n0] ctime`
+#      command: fstest lstat ${n0} ctime
+#      saveout: $config_dir/13_ctime2
+
+#    # test_check $ctime1 -lt $ctime2
+#    - name: T13 - test_check [ctime1] -lt [ctime2]
+#      command: $tasksf_dir/cmptimestamps.py lt -f $config_dir/13_ctime1 $config_dir/13_ctime2
+#      exit: 0
+
+#    # expect 0 unlink ${n0}
+#    - name: T13 - expect 0 unlink [n0]
+#      command: sudo fstest unlink ${n0}
+#      compareout: "0"
+
+
+    # 129
+    # expect 0 create ${n0} 0644
+    - name: T14 - expect 0 create [n0] 0644
+      command: fstest create ${n0} 0644
+      compareout: "0"
+
+    # expect 0 chown ${n0} 65534 65533
+    - name: T14 - expect 0 chown [n0] 65534 65533
+      command: sudo fstest chown ${n0} 65534 65533
+      compareout: "0"
+
+    # ctime1=`${fstest} stat ${n0} ctime`
+    - name: T14 - ctime1=`[fstest] stat [n0] ctime`
+      command: fstest stat ${n0} ctime
+      saveout: $config_dir/14_ctime1
+
+    # sleep 1
+    - name: T14 - sleep 1
+      command: sleep 1s
+
+    # expect 0 -u 65534 -g 65532 chown ${n0} 65534 65532
+    - name: T14 - expect 0 -u 65534 -g 65532 chown [n0] 65534 65532
+      command: sudo fstest -u 65534 -g 65532 chown ${n0} 65534 65532
+      compareout: "0"
+
+    # expect 65534,65532 lstat ${n0} uid,gid
+    - name: T14 - expect 65534,65532 lstat [n0] uid,gid
+      command: fstest lstat ${n0} uid,gid
+      compareout: "65534,65532"
+
+    # ctime2=`${fstest} stat ${n0} ctime`
+    - name: T14 - ctime2=`[fstest] stat [n0] ctime`
+      command: fstest stat ${n0} ctime
+      saveout: $config_dir/14_ctime2
+
+    # test_check $ctime1 -lt $ctime2
+    - name: T14 - test_check [ctime1] -lt [ctime2]
+      command: $tasksf_dir/cmptimestamps.py lt -f $config_dir/14_ctime1 $config_dir/14_ctime2
+      exit: 0
+
+    # expect 0 unlink ${n0}
+    - name: T14 - expect 0 unlink [n0]
+      command: sudo fstest unlink ${n0}
+      compareout: "0"
+
+
+    # 135
+    # expect 0 mkdir ${n0} 0755
+    - name: T15 - expect 0 mkdir [n0] 0755
+      command: fstest mkdir ${n0} 0755
+      compareout: "0"
+
+    # expect 0 chown ${n0} 65534 65533
+    - name: T15 - expect 0 chown [n0] 65534 65533
+      command: sudo fstest chown ${n0} 65534 65533
+      compareout: "0"
+
+    # ctime1=`${fstest} stat ${n0} ctime`
+    - name: T15 - ctime1=`[fstest] stat [n0] ctime`
+      command: fstest stat ${n0} ctime
+      saveout: $config_dir/15_ctime1
+
+    # sleep 1
+    - name: T15 - sleep 1
+      command: sleep 1s
+
+    # expect 0 -u 65534 -g 65532 chown ${n0} 65534 65532
+    - name: T15 - expect 0 -u 65534 -g 65532 chown [n0] 65534 65532
+      command: sudo fstest -u 65534 -g 65532 chown ${n0} 65534 65532
+      compareout: "0"
+
+    # expect 65534,65532 lstat ${n0} uid,gid
+    - name: T15 - expect 65534,65532 lstat [n0] uid,gid
+      command: fstest lstat ${n0} uid,gid
+      compareout: "65534,65532"
+
+    # ctime2=`${fstest} stat ${n0} ctime`
+    - name: T15 - ctime2=`[fstest] stat [n0] ctime`
+      command: fstest stat ${n0} ctime
+      saveout: $config_dir/15_ctime2
+
+    # test_check $ctime1 -lt $ctime2
+    - name: T15 - test_check [ctime1] -lt [ctime2]
+      command: $tasksf_dir/cmptimestamps.py lt -f $config_dir/15_ctime1 $config_dir/15_ctime2
+      exit: 0
+
+    # expect 0 rmdir ${n0}
+    - name: T15 - expect 0 rmdir [n0]
+      command: sudo fstest rmdir ${n0}
+      compareout: "0"
+
+
+    # 148
+#    # expect 0 symlink ${n1} ${n0}
+#    - name: T16 - expect 0 symlink [n1] [n0]
+#      command: fstest symlink ${n1} ${n0}
+#      compareout: "0"
+
+#    # expect 0 lchown ${n0} 65534 65533
+#    - name: T16 - expect 0 lchown [n0] 65534 65533
+#      command: sudo fstest lchown ${n0} 65534 65533
+#      compareout: "0"
+
+#    # ctime1=`${fstest} lstat ${n0} ctime`
+#    - name: T16 - ctime1=`[fstest] lstat [n0] ctime`
+#      command: fstest lstat ${n0} ctime
+#      saveout: $config_dir/16_ctime1
+
+#    # sleep 1
+#    - name: T16 - sleep 1
+#      command: sleep 1s
+
+#    # expect 0 -u 65534 -g 65532 lchown ${n0} 65534 65532
+#    - name: T16 - expect 0 -u 65534 -g 65532 lchown [n0] 65534 65532
+#      command: sudo fstest -u 65534 -g 65532 lchown ${n0} 65534 65532
+#      compareout: "0"
+
+#    # expect 65534,65532 lstat ${n0} uid,gid
+#    - name: T16 - expect 65534,65532 lstat [n0] uid,gid
+#      command: fstest lstat ${n0} uid,gid
+#      compareout: "65534,65532"
+
+#    # ctime2=`${fstest} lstat ${n0} ctime`
+#    - name: T16 - ctime2=`[fstest] lstat [n0] ctime`
+#      command: fstest lstat ${n0} ctime
+#      saveout: $config_dir/16_ctime2
+
+#    # test_check $ctime1 -lt $ctime2
+#    - name: T16 - test_check [ctime1] -lt [ctime2]
+#      command: $tasksf_dir/cmptimestamps.py lt -f $config_dir/16_ctime1 $config_dir/16_ctime2
+#      exit: 0
+
+#    # expect 0 unlink ${n0}
+#    - name: T16 - expect 0 unlink [n0]
+#      command: sudo fstest unlink ${n0}
+#      compareout: "0"
+
+
+    # 154
+    # expect 0 create ${n0} 0644
+    - name: T17 - expect 0 create [n0] 0644
+      command: fstest create ${n0} 0644
+      compareout: "0"
+
+    # ctime1=`${fstest} stat ${n0} ctime`
+    - name: T17 - ctime1=`[fstest] stat [n0] ctime`
+      command: fstest stat ${n0} ctime
+      saveout: $config_dir/17_ctime1
+
+    # sleep 1
+    - name: T17 - sleep 1
+      command: sleep 1s
+
+    # expect 0 -- chown ${n0} -1 -1
+    - name: T17 - expect 0 -- chown [n0] -1 -1
+      command: sudo fstest -- chown ${n0} -1 -1
+      compareout: "0"
+
+    # ctime2=`${fstest} stat ${n0} ctime`
+    - name: T17 - ctime2=`[fstest] stat [n0] ctime`
+      command: fstest stat ${n0} ctime
+      saveout: $config_dir/17_ctime2
+
+    # test_check $ctime1 -lt $ctime2
+    - name: T17 - test_check [ctime1] -lt [ctime2]
+      command: $tasksf_dir/cmptimestamps.py lt -f $config_dir/17_ctime1 $config_dir/17_ctime2
+      exit: 0
+
+    # expect 0 unlink ${n0}
+    - name: T17 - expect 0 unlink [n0]
+      command: sudo fstest unlink ${n0}
+      compareout: "0"
+
+
+    # 158
+    # expect 0 mkdir ${n0} 0644
+    - name: T18 - expect 0 mkdir [n0] 0644
+      command: fstest mkdir ${n0} 0644
+      compareout: "0"
+
+    # ctime1=`${fstest} stat ${n0} ctime`
+    - name: T18 - ctime1=`[fstest] stat [n0] ctime`
+      command: fstest stat ${n0} ctime
+      saveout: $config_dir/18_ctime1
+
+    # sleep 1
+    - name: T18 - sleep 1
+      command: sleep 1s
+
+    # expect 0 -- chown ${n0} -1 -1
+    - name: T18 - expect 0 -- chown [n0] -1 -1
+      command: sudo fstest -- chown ${n0} -1 -1
+      compareout: "0"
+
+    # ctime2=`${fstest} stat ${n0} ctime`
+    - name: T18 - ctime2=`[fstest] stat [n0] ctime`
+      command: fstest stat ${n0} ctime
+      saveout: $config_dir/18_ctime2
+
+    # test_check $ctime1 -lt $ctime2
+    - name: T18 - test_check [ctime1] -lt [ctime2]
+      command: $tasksf_dir/cmptimestamps.py lt -f $config_dir/18_ctime1 $config_dir/18_ctime2
+      exit: 0
+
+    # expect 0 rmdir ${n0}
+    - name: T18 - expect 0 rmdir [n0]
+      command: sudo fstest rmdir ${n0}
+      compareout: "0"
+
+
+    # 166
+#    # expect 0 symlink ${n1} ${n0}
+#    - name: T19 - expect 0 symlink [n1] [n0]
+#      command: fstest symlink ${n1} ${n0}
+#      compareout: "0"
+
+#    # ctime1=`${fstest} lstat ${n0} ctime`
+#    - name: T19 - ctime1=`[fstest] lstat [n0] ctime`
+#      command: fstest lstat ${n0} ctime
+#      saveout: $config_dir/19_ctime1
+
+#    # sleep 1
+#    - name: T19 - sleep 1
+#      command: sleep 1s
+
+#    # expect 0 -- lchown ${n0} -1 -1
+#    - name: T19 - expect 0 -- lchown [n0] -1 -1
+#      command: sudo fstest -- lchown ${n0} -1 -1
+#      compareout: "0"
+
+#    # ctime2=`${fstest} lstat ${n0} ctime`
+#    - name: T19 - ctime2=`[fstest] lstat [n0] ctime`
+#      command: fstest lstat ${n0} ctime
+#      saveout: $config_dir/19_ctime2
+
+#    # test_check $ctime1 -lt $ctime2
+#    - name: T19 - test_check [ctime1] -lt [ctime2]
+#      command: $tasksf_dir/cmptimestamps.py lt -f $config_dir/19_ctime1 $config_dir/19_ctime2
+#      exit: 0
+
+#    # expect 0 unlink ${n0}
+#    - name: T19 - expect 0 unlink [n0]
+#      command: sudo fstest unlink ${n0}
+#      compareout: "0"
+
+
+    # unsuccessful chown(2) does not update ctime.
+    # 170
+    # expect 0 create ${n0} 0644
+    - name: T20 - expect 0 create [n0] 0644
+      command: fstest create ${n0} 0644
+      compareout: "0"
+
+    # ctime1=`${fstest} stat ${n0} ctime`
+    - name: T20 - ctime1=`[fstest] stat [n0] ctime`
+      command: fstest stat ${n0} ctime
+      saveout: $config_dir/20_ctime1
+
+    # sleep 1
+    - name: T20 - sleep 1
+      command: sleep 1s
+
+    # expect EPERM -u 65534 -- chown ${n0} 65534 -1
+    - name: T20 - expect EPERM -u 65534 -- chown [n0] 65534 -1
+      command: sudo fstest -u 65534 -- chown ${n0} 65534 -1
+      compareout: "EPERM"
+      exit: 1
+
+    # ctime2=`${fstest} stat ${n0} ctime`
+    - name: T20 - ctime2=`[fstest] stat [n0] ctime`
+      command: fstest stat ${n0} ctime
+      saveout: $config_dir/20_ctime2
+
+    # test_check $ctime1 -eq $ctime2
+    - name: T20 - test_check [ctime1] -eq [ctime2]
+      command: $tasksf_dir/cmptimestamps.py eq -f $config_dir/20_ctime1 $config_dir/20_ctime2
+      exit: 0
+
+    # expect 0 unlink ${n0}
+    - name: T20 - expect 0 unlink [n0]
+      command: sudo fstest unlink ${n0}
+      compareout: "0"
+
+
+    # 174
+    # expect 0 mkdir ${n0} 0755
+    - name: T21 - expect 0 mkdir [n0] 0755
+      command: fstest mkdir ${n0} 0755
+      compareout: "0"
+
+    # ctime1=`${fstest} stat ${n0} ctime`
+    - name: T21 - ctime1=`[fstest] stat [n0] ctime`
+      command: fstest stat ${n0} ctime
+      saveout: $config_dir/21_ctime1
+
+    # sleep 1
+    - name: T21 - sleep 1
+      command: sleep 1s
+
+    # expect EPERM -u 65534 -g 65534 -- chown ${n0} -1 65534
+    - name: T21 - expect EPERM -u 65534 -g 65534 -- chown [n0] -1 65534
+      command: sudo fstest -u 65534 -g 65534 -- chown ${n0} -1 65534
+      compareout: "EPERM"
+      exit: 1
+
+    # ctime2=`${fstest} stat ${n0} ctime`
+    - name: T21 - ctime2=`[fstest] stat [n0] ctime`
+      command: fstest stat ${n0} ctime
+      saveout: $config_dir/21_ctime2
+
+    # test_check $ctime1 -eq $ctime2
+    - name: T21 - test_check [ctime1] -eq [ctime2]
+      command: $tasksf_dir/cmptimestamps.py eq -f $config_dir/21_ctime1 $config_dir/21_ctime2
+      exit: 0
+
+    # expect 0 rmdir ${n0}
+    - name: T21 - expect 0 rmdir [n0]
+      command: sudo fstest rmdir ${n0}
+      compareout: "0"
+
+
+    # 182
+#    # expect 0 symlink ${n1} ${n0}
+#    - name: T22 - expect 0 symlink [n1] [n0]
+#      command: fstest symlink ${n1} ${n0}
+#      compareout: "0"
+
+#    # ctime1=`${fstest} lstat ${n0} ctime`
+#    - name: T22 - ctime1=`[fstest] lstat [n0] ctime`
+#      command: fstest lstat ${n0} ctime
+#      saveout: $config_dir/22_ctime1
+
+#    # sleep 1
+#    - name: T22 - sleep 1
+#      command: sleep 1s
+
+#    # expect EPERM -u 65534 -g 65534 lchown ${n0} 65534 65534
+#    - name: T22 - expect EPERM -u 65534 -g 65534 lchown [n0] 65534 65534
+#      command: sudo fstest -u 65534 -g 65534 lchown ${n0} 65534 65534
+#      compareout: "EPERM"
+#      exit: 1
+
+#    # ctime2=`${fstest} lstat ${n0} ctime`
+#    - name: T22 - ctime2=`[fstest] lstat [n0] ctime`
+#      command: fstest lstat ${n0} ctime
+#      saveout: $config_dir/22_ctime2
+
+#    # test_check $ctime1 -eq $ctime2
+#    - name: T22 - test_check [ctime1] -eq [ctime2]
+#      command: $tasksf_dir/cmptimestamps.py eq -f $config_dir/22_ctime1 $config_dir/22_ctime2
+#      exit: 0
+
+#    # expect 0 unlink ${n0}
+#    - name: T22 - expect 0 unlink [n0]
+#      command: sudo fstest unlink ${n0}
+#      compareout: "0"

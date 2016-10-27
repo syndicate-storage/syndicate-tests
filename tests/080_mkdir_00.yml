@@ -1,0 +1,302 @@
+---
+
+- name: setup_mkdir_00
+  type: setup
+  tmpdirs:
+    - name: 080_mkdir_00_fs
+      varname: config_dir
+    - name: 080_mkdir_00_fs_mount
+      varname: mount_dir
+      mode: 0755
+  randnames:
+    - test_volume
+    - test_rg
+    - test_ug
+    - test_n0
+    - test_n1
+  vars:
+    - name: n1
+      value: $mount_dir/$test_n1
+    - name: n0
+      value: $mount_dir/$test_n1/$test_n0
+    - name: syndicate_conf
+      value: $config_dir/syndicate.conf
+    - name: rg_driver
+      value: $SYNDICATE_PYTHON_ROOT/syndicate/rg/drivers/disk
+    - name: rg_path
+      value: $SYNDICATE_RG_ROOT/syndicate-rg
+    - name: ug_path
+      value: $SYNDICATE_UG_ROOT/syndicatefs
+
+- name: config
+  type: sequential
+  tasks:
+    - name: setup
+      command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS"
+
+    - name: add test volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name=$test_volume description="test volume" blocksize=4096 email=$SYNDICATE_ADMIN
+
+    - name: create RG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_rg type=RG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
+
+    - name: update RG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_rg caps=ALL port=31112 driver=$rg_driver
+
+    - name: create UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_ug type=UG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
+
+    - name: update UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_ug caps=ALL
+
+- name: daemon UG/RG
+  type: daemon
+  tasks:
+    - name: start RG
+      command: $rg_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_rg
+      exit: 0
+
+    - name: start UG
+      command: $ug_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_ug $mount_dir
+      exit: 0
+
+- name: check syndicate is mounted
+  type: sequential
+  tasks:
+    - name: wait for syndicatefs to be mounted
+      command: sleep 5s
+
+    - name: test filesystem type
+      command: stat -f -L -c %T $mount_dir
+      compareout: "fuseblk"
+
+- name: run mkdir tests 00
+  type: sequential
+  tasks:
+    # expect 0 mkdir ${n1} 0755
+    - name: T1 - expect 0 mkdir [n1] 0755
+      command: fstest mkdir ${n1} 0755
+      compareout: "0"
+
+
+    # POSIX: The file permission bits of the new directory shall be initialized from
+    # mode. These file permission bits of the mode argument shall be modified by the
+    # process' file creation mask.
+    # expect 0 mkdir ${n0} 0755
+    - name: T2 - expect 0 mkdir [n0] 0755
+      command: fstest mkdir ${n0} 0755
+      compareout: "0"
+
+    # expect dir,0755 lstat ${n0} type,mode
+    - name: T2 - expect dir,0755 lstat [n0] type,mode
+      command: fstest lstat ${n0} type,mode
+      compareout: "dir,0755"
+
+    # expect 0 rmdir ${n0}
+    - name: T2 - expect 0 rmdir [n0]
+      command: fstest rmdir ${n0}
+      compareout: "0"
+
+    # expect 0 mkdir ${n0} 0151
+    - name: T2 - expect 0 mkdir [n0] 0151
+      command: fstest mkdir ${n0} 0151
+      compareout: "0"
+
+    # expect dir,0151 lstat ${n0} type,mode
+    - name: T2 - expect dir,0151 lstat [n0] type,mode
+      command: fstest lstat ${n0} type,mode
+      compareout: "dir,0151"
+
+    # expect 0 rmdir ${n0}
+    - name: T2 - expect 0 rmdir [n0]
+      command: fstest rmdir ${n0}
+      compareout: "0"
+
+    # expect 0 -U 077 mkdir ${n0} 0151
+    - name: T2 - expect 0 -U 077 mkdir [n0] 0151
+      command: fstest -U 077 mkdir ${n0} 0151
+      compareout: "0"
+
+    # expect dir,0100 lstat ${n0} type,mode
+    - name: T2 - expect dir,0100 lstat [n0] type,mode
+      command: fstest lstat ${n0} type,mode
+      compareout: "dir,0100"
+
+    # expect 0 rmdir ${n0}
+    - name: T2 - expect 0 rmdir [n0]
+      command: fstest rmdir ${n0}
+      compareout: "0"
+
+    # expect 0 -U 070 mkdir ${n0} 0345
+    - name: T2 - expect 0 -U 070 mkdir [n0] 0345
+      command: fstest -U 070 mkdir ${n0} 0345
+      compareout: "0"
+
+    # expect dir,0305 lstat ${n0} type,mode
+    - name: T2 - expect dir,0305 lstat [n0] type,mode
+      command: fstest lstat ${n0} type,mode
+      compareout: "dir,0305"
+
+    # expect 0 rmdir ${n0}
+    - name: T2 - expect 0 rmdir [n0]
+      command: fstest rmdir ${n0}
+      compareout: "0"
+
+    # expect 0 -U 0501 mkdir ${n0} 0345
+    - name: T2 - expect 0 -U 0501 mkdir [n0] 0345
+      command: fstest -U 0501 mkdir ${n0} 0345
+      compareout: "0"
+
+    # expect dir,0244 lstat ${n0} type,mode
+    - name: T2 - expect dir,0244 lstat [n0] type,mode
+      command: fstest lstat ${n0} type,mode
+      compareout: "dir,0244"
+
+    # expect 0 rmdir ${n0}
+    - name: T2 - expect 0 rmdir [n0]
+      command: fstest rmdir ${n0}
+      compareout: "0"
+
+
+    # POSIX: The directory's user ID shall be set to the process' effective user ID.
+    # The directory's group ID shall be set to the group ID of the parent directory
+    # or to the effective group ID of the process.
+    # expect 0 chown . 65535 65535
+    - name: T3 - expect 0 chown [n1] 65535 65535
+      command: sudo fstest chown ${n1} 65535 65535
+      compareout: "0"
+
+    # expect 0 -u 65535 -g 65535 mkdir ${n0} 0755
+    - name: T3 - expect 0 -u 65535 -g 65535 mkdir [n0] 0755
+      command: sudo fstest -u 65535 -g 65535 mkdir ${n0} 0755
+      compareout: "0"
+
+    # expect 65535,65535 lstat ${n0} uid,gid
+    - name: T3 - expect 65535,65535 lstat [n0] uid,gid
+      command: fstest lstat ${n0} uid,gid
+      compareout: "65535,65535"
+
+    # expect 0 rmdir ${n0}
+    - name: T3 - expect 0 rmdir [n0]
+      command: sudo fstest rmdir ${n0}
+      compareout: "0"
+
+    # expect 0 -u 65535 -g 65534 mkdir ${n0} 0755
+    - name: T3 - expect 0 -u 65535 -g 65534 mkdir [n0] 0755
+      command: sudo fstest -u 65535 -g 65534 mkdir ${n0} 0755
+      compareout: "0"
+
+    # expect "65535,6553[45]" lstat ${n0} uid,gid
+    - name: T3 - expect "65535,65534" lstat [n0] uid,gid
+      command: fstest lstat ${n0} uid,gid
+      compareout: "65535,65534"
+
+    # expect 0 rmdir ${n0}
+    - name: T3 - expect 0 rmdir [n0]
+      command: sudo fstest rmdir ${n0}
+      compareout: "0"
+
+    # expect 0 chmod . 0777
+    - name: T3 - expect 0 chmod [n1] 0777
+      command: sudo fstest chmod ${n1} 0777
+      compareout: "0"
+
+    # expect 0 -u 65534 -g 65533 mkdir ${n0} 0755
+    - name: T3 - expect 0 -u 65534 -g 65533 mkdir [n0] 0755
+      command: sudo fstest -u 65534 -g 65533 mkdir ${n0} 0755
+      compareout: "0"
+
+    # expect "65534,6553[35]" lstat ${n0} uid,gid
+    - name: T3 - expect "65534,6553[35]" lstat [n0] uid,gid
+      command: fstest lstat ${n0} uid,gid
+      compareout: "65534,65533"
+
+    # expect 0 rmdir ${n0}
+    - name: T3 - expect 0 rmdir [n0]
+      command: sudo fstest rmdir ${n0}
+      compareout: "0"
+
+
+    # POSIX: Upon successful completion, mkdir() shall mark for update the st_atime,
+    # st_ctime, and st_mtime fields of the directory. Also, the st_ctime and
+    # st_mtime fields of the directory that contains the new entry shall be marked
+    # for update.
+    # expect 0 chown . 0 0
+    - name: T4 - expect 0 chown [n1] 0 0
+      command: sudo fstest chown ${n1} 0 0
+      compareout: "0"
+
+    # time=`${fstest} stat . ctime`
+    - name: T4 - time=`[fstest] stat [n1] ctime`
+      command: fstest stat ${n1} ctime
+      saveout: $config_dir/4_time
+
+    # sleep 1
+    - name: T4 - sleep 1
+      command: sleep 1s
+
+    # expect 0 mkdir ${n0} 0755
+    - name: T4 - expect 0 mkdir [n0] 0755
+      command: fstest mkdir ${n0} 0755
+      compareout: "0"
+
+    # atime=`${fstest} stat ${n0} atime`
+    - name: T4 - atime=`[fstest] stat [n0] atime`
+      command: fstest stat ${n0} atime
+      saveout: $config_dir/4_atime
+
+    # test_check $time -lt $atime
+    - name: T4 - test_check [time] -lt [atime]
+      command: $tasksf_dir/cmptimestamps.py lt -f $config_dir/4_time $config_dir/4_atime
+      exit: 0
+
+    # mtime=`${fstest} stat ${n0} mtime`
+    - name: T4 - mtime=`[fstest] stat [n0] mtime`
+      command: fstest stat ${n0} mtime
+      saveout: $config_dir/4_mtime
+
+    # test_check $time -lt $mtime
+    - name: T4 - test_check [time] -lt [mtime]
+      command: $tasksf_dir/cmptimestamps.py lt -f $config_dir/4_time $config_dir/4_mtime
+      exit: 0
+
+    # ctime=`${fstest} stat ${n0} ctime`
+    - name: T4 - ctime=`[fstest] stat [n0] ctime`
+      command: fstest stat ${n0} ctime
+      saveout: $config_dir/4_ctime
+
+    # test_check $time -lt $ctime
+    - name: T4 - test_check [time] -lt [ctime]
+      command: $tasksf_dir/cmptimestamps.py lt -f $config_dir/4_time $config_dir/4_ctime
+      exit: 0
+
+    # mtime=`${fstest} stat . mtime`
+    - name: T4 - mtime=`[fstest] stat [n1] mtime`
+      command: fstest stat ${n1} mtime
+      saveout: $config_dir/4_mtime2
+
+    # test_check $time -lt $mtime
+    - name: T4 - test_check [time] -lt [mtime]
+      command: $tasksf_dir/cmptimestamps.py lt -f $config_dir/4_time $config_dir/4_mtime2
+      exit: 0
+
+    # ctime=`${fstest} stat . ctime`
+    - name: T4 - ctime=`[fstest] stat [n1] ctime`
+      command: fstest stat ${n1} ctime
+      saveout: $config_dir/4_ctime2
+
+    # test_check $time -lt $ctime
+    - name: T4 - test_check [time] -lt [ctime]
+      command: $tasksf_dir/cmptimestamps.py lt -f $config_dir/4_time $config_dir/4_ctime2
+      exit: 0
+
+    # expect 0 rmdir ${n0}
+    - name: T4 - expect 0 rmdir [n0]
+      command: sudo fstest rmdir ${n0}
+      compareout: "0"
+
+
+    # expect 0 rmdir ${n1}
+    - name: T5 - expect 0 rmdir [n1]
+      command: sudo fstest rmdir ${n1}
+      compareout: "0"

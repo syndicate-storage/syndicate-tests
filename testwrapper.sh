@@ -5,11 +5,6 @@
 #   -i			interactively ask which test to run
 #   -n <test number>	run the test number specified
 
-TESTDIR=./tests
-RESULTDIR=./results
-OUTPUTDIR=./output
-BASH=/bin/bash
-
 debug=''
 if [[ $@ =~ -d ]]; then
   debug='-m pdb'

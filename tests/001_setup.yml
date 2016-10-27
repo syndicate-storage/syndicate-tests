@@ -1,0 +1,35 @@
+---
+
+- name: setup_setup
+  type: setup
+  tmpdirs:
+    - name: 001_setup_test
+      varname: config_dir
+
+- name: setup_test
+  type: sequential
+  tasks:
+    - name: configure syndicate 
+      command: $SYNDICATE_TOOL --trust_public_key -c "${config_dir}/syndicate.conf" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS"
+
+    - name: test for syndicate.conf
+      command: test -f "${config_dir}/syndicate.conf"
+
+    - name: test for users subdir
+      command: test -d "${config_dir}/users"
+
+    - name: test for volumes subdir
+      command: test -d "${config_dir}/volumes"
+
+    - name: test for gateways subdir
+      command: test -d "${config_dir}/gateways"
+
+    - name: test for syndicate subdir
+      command: test -d "${config_dir}/syndicate"
+
+    - name: test for admin cert
+      command: test -f "${config_dir}/users/$SYNDICATE_ADMIN.cert"
+
+    - name: test for admin pkey
+      command: test -f "${config_dir}/users/$SYNDICATE_ADMIN.pkey"
+

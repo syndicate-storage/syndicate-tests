@@ -1,0 +1,78 @@
+---
+
+- name: setup_create_delete_user
+  type: setup
+  tmpdirs:
+    - name: 002_create_delete_user
+      varname: config_dir
+  randnames:
+    - random_email
+  vars:
+    - name: syndicate_conf
+      value: $config_dir/syndicate.conf
+    - name: random_user
+      value: $random_email@gmail.com
+    - name: random_admin
+      value: $random_email@admin.com
+
+- name: create_delete_user_test
+  type: sequential
+  tasks:
+
+    - name: setup
+      command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS"
+
+    - name: create normal user
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_user "$random_user" auto max_volumes=20 max_gateways=21
+
+    - name: create admin user
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_user "$random_admin" auto max_volumes=20 max_gateways=21 is_admin=True
+
+    - name: try to create duplicate user
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_user "$random_user" auto
+      exit: 1
+
+    - name: try to create with invalid email/name
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_user "asdf.not.an.email" auto
+      exit: 1
+
+    - name: create private key for user
+      command: openssl genrsa 4096
+      saveout: $config_dir/$random_user.au.pkey
+
+    - name: create user with existing private key
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_user "$random_user.au" "$config_dir/$random_user.au.pkey"
+
+    - name: delete user with existing private key
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" delete_user "$random_user.au"
+
+    - name: delete normal user
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" delete_user "$random_user"
+
+    - name: delete admin user
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" delete_user "$random_admin"
+
+    - name: create user list (should not have removed users)
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" list_users
+      saveout: $config_dir/post_remove_list_users
+
+    - name: check userlist for normal user
+      command: grep "$random_user" $config_dir/post_remove_list_users
+      exit: 1
+
+    - name: check userlist for admin user
+      command: grep "$random_admin" $config_dir/post_remove_list_users
+      exit: 1
+
+    - name: create file with contents of users dir
+      command: ls $config_dir/users
+      saveout: $config_dir/post_remove_users_dir
+
+    - name: verify that normal user has been removed
+      command: grep "$random_user" $config_dir/post_remove_users_dir
+      exit: 1
+
+    - name: verify that admin user has been removed
+      command: grep "$random_admin" $config_dir/post_remove_users_dir
+      exit: 1
+

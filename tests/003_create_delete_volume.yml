@@ -1,0 +1,73 @@
+---
+
+- name: setup_create_delete_volume
+  type: setup
+  tmpdirs:
+    - name: 003_create_delete_volume
+      varname: config_dir
+  randnames:
+    - random_volume
+  vars:
+    - name: syndicate_conf
+      value: $config_dir/syndicate.conf
+
+
+- name: c_d_v_tests
+  type: sequential
+  tasks:
+
+    - name: syndicate setup
+      command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS"
+
+    - name: create volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name="$random_volume" description="test create_volume" blocksize=4096 email="$SYNDICATE_ADMIN"
+
+    - name: dupe create volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name="$random_volume" description="test create_volume duplicate" blocksize=4096 email="$SYNDICATE_ADMIN"
+      exit: 1
+
+    - name: empty name
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name="" description="blank volume name" blocksize=4096 email="$SYNDICATE_ADMIN"
+      exit: 1
+
+    - name: bad user email
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name="$random_volume-1" description="bad user email" blocksize=4096 email="noname@gmail.com"
+      exit: 1
+
+    - name: blocksize omitted
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name="$random_volume-2" description="no blocksize" email="$SYNDICATE_ADMIN"
+      exit: 1
+
+    - name: create directory to move aside volumes data
+      command: mkdir -p $config_dir/volumes_bak
+
+    - name: move aside volume data
+      shell: mv $config_dir/volumes/* $config_dir/volumes_bak/
+
+    - name: delete volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" delete_volume "$random_volume"
+
+    - name: list volumes
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" list_volumes
+      saveout: $config_dir/list_volumes
+      checkout: $tasksf_dir/emptylist
+
+    - name: check that volume was deleted
+      command: grep "$random_volume" $config_dir/list_volumes
+      exit: 1
+
+    - name: verify that volumes dir is empty
+      command: ls $config_dir/volumes/
+      checkout: $tasksf_dir/emptyfile
+
+    - name: delete volume dupe
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" delete_volume "$random_volume"
+      exit: 1
+
+    - name: move back volumes data
+      shell: mv $config_dir/volumes_bak/* $config_dir/volumes/
+
+    - name: delete on MS
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" delete_volume "$random_volume"
+
+

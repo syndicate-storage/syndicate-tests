@@ -1,0 +1,94 @@
+---
+
+- name: setup_put_get
+  type: setup
+  tmpdirs:
+    - name: 011_put_get
+      varname: config_dir
+  randnames:
+    - test_volume
+    - test_rg
+    - put_ug
+    - get_ug
+  valueloop:
+    - name: test_fsizes
+      values:
+        - 0
+        - 1
+        - 4095
+        - 4096
+        - 4097
+        - 8191
+        - 8192
+        - 8193
+        - 16384
+        - 65535
+        - 65536
+        - 65537
+  vars:
+    - name: local_file
+      value: $config_dir/local_file
+    - name: syndicate_conf
+      value: $config_dir/syndicate.conf
+    - name: rg_driver
+      value: $SYNDICATE_PYTHON_ROOT/syndicate/rg/drivers/disk
+    - name: rg_path
+      value: $SYNDICATE_RG_ROOT/syndicate-rg
+    - name: put_path
+      value: $SYNDICATE_UG_ROOT/syndicate-put
+    - name: get_path
+      value: $SYNDICATE_UG_ROOT/syndicate-get
+
+- name: config
+  type: sequential
+  tasks:
+    - name: setup
+      command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS"
+
+    - name: add test volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name=$test_volume description="test volume" blocksize=4096 email=$SYNDICATE_ADMIN
+
+    - name: create RG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_rg type=RG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
+
+    - name: update RG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_rg caps=ALL port=31112 driver=$rg_driver
+
+- name: daemon RG
+  type: daemon
+  tasks:
+    - name: start RG
+      command: $rg_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_rg
+      exit: 0
+
+- name: setup UGs
+  type: sequential
+  tasks:
+    - name: create put UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$put_ug type=UG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
+
+    - name: update put UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$put_ug caps=ALL
+
+    - name: create get UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$get_ug type=UG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
+
+    - name: update get UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$get_ug caps=ALL
+
+- name: run put/get tests with files in different sizes
+  type: sequential
+  loop_on: test_fsizes
+  tasks:
+    - name: make local_file
+      command: $tasksf_dir/mkrandfile.py ${local_file}_${loop_var} $loop_var
+
+    - name: test put
+      command: $put_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $put_ug ${local_file}_${loop_var} /$loop_var
+
+    - name: test get
+      command: $get_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $get_ug /$loop_var $config_dir/get_${loop_var}
+
+    - name: compare
+      command: diff -q ${local_file}_${loop_var} $config_dir/get_${loop_var}
+      exit: 0

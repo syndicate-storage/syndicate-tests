@@ -15,8 +15,8 @@ if [[ $@ =~ -n ]]; then
   testnumber=`echo $@ | sed -e 's/^.*-n//g' -e 's/^ *0*//g' | xargs printf "%03d"`
 fi
 
-# bring in config
-source config.sh
+# bring in config (in the same directory as this script)
+source "${BASH_SOURCE%/*}/config.sh"
 
 # Start testing
 echo "Start Time: `date +'%F %T'`"

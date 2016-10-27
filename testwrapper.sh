@@ -40,14 +40,14 @@ if [ $testnumber -eq 0 ]; then
     fi
     if [ $runtest == 1 ]; then
       echo "Running test: '${testname}'"
-      python $debug ./testrunner.py -d -t ${RESULTDIR}/${testname%.*}.tap ${test} ${OUTPUTDIR}/${testname%.*}.out
+      python $debug ${CONFIG_ROOT}/testrunner.py -d -t ${RESULTDIR}/${testname%.*}.tap ${test} ${OUTPUTDIR}/${testname%.*}.out
     fi
   done
 else
   test=`find ${TESTDIR} -name "*${testnumber}_*.yml"`
   testname=${test##*/}
   echo "Running test: '${testname}'"
-  python $debug ./testrunner.py -d -t ${RESULTDIR}/${testname%.*}.tap ${test} ${OUTPUTDIR}/${testname%.*}.out
+  python $debug ${CONFIG_ROOT}/testrunner.py -d -t ${RESULTDIR}/${testname%.*}.tap ${test} ${OUTPUTDIR}/${testname%.*}.out
 fi
 
 echo "Copying logs..."

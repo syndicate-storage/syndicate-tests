@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Configuration for Syndicate Tests
 
-export TESTDIR=${TESTDIR:-$PWD/tests}
+export CONFIG_ROOT="${BASH_SOURCE%/*}"
+
+export TESTDIR=${TESTDIR:-$CONFIG_ROOT/tests}
 
 export TESTING_ROOT=${TESTING_ROOT:-/opt}
 export RESULTDIR=${TESTING_ROOT}/results

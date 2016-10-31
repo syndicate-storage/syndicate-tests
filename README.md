@@ -22,7 +22,7 @@ follows:
 ### testwrapper.sh command
 
 ```
-usage: testwrapper.sh [-d] [-i] [-n <test number>]
+usage: testwrapper.sh [-d] [-i] [-v] [-n <test number>]
 
    -d     Debug testrunner.py
 
@@ -31,6 +31,8 @@ usage: testwrapper.sh [-d] [-i] [-n <test number>]
    -n number
           The test number specified
           Either "-n 1" or "-n 001" would run the "001_setup.yml" test
+
+   -v     verbose, run with DEBUG logging
 ```
 
 ### testrunner.py command
@@ -90,13 +92,12 @@ The syntax of the testing files has two block types, `setup` and `tasks`.
         - larry
         - moe
         - curly
-  valueloop:
     - name: val_dictionary
       values:
         - start: 0
-          end: 4096
+          stop: 4096
         - start: 0
-          end: 8192
+          stop: 8192
 ```
 
 Setup is used to define variables, create testing directories, and files with

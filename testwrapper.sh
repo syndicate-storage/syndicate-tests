@@ -4,10 +4,21 @@
 #   -d 			run with python debugger
 #   -i			interactively ask which test to run
 #   -n <test number>	run the test number specified
+#   -v                  enable verbose testrunner debug logs
+
+TESTDIR=./syndicate-tests
+RESULTDIR=./results
+OUTPUTDIR=./output
+BASH=/bin/bash
 
 debug=''
 if [[ $@ =~ -d ]]; then
   debug='-m pdb'
+fi
+
+verbosedebug=''
+if [[ $@ =~ -v ]]; then
+  verbosedebug='-d'
 fi
 
 testnumber=0
@@ -28,7 +39,7 @@ rm -f ${RESULTDIR}/*.tap
 
 # run the tests
 if [ $testnumber -eq 0 ]; then
-  for test in $(ls ${TESTDIR}/*.yml ); do
+  for test in $(ls ${TESTDIR}/*.yml); do
     testname=${test##*/}
     runtest=1
     if [[ $@ =~ -i ]]; then
@@ -39,15 +50,19 @@ if [ $testnumber -eq 0 ]; then
       fi
     fi
     if [ $runtest == 1 ]; then
-      echo "Running test: '${testname}'"
-      python $debug ${CONFIG_ROOT}/testrunner.py -d -t ${RESULTDIR}/${testname%.*}.tap ${test} ${OUTPUTDIR}/${testname%.*}.out
+      if [[ -n `cat $test | grep "debug:.*disabled"` ]]; then
+        echo "Skipping test: '${testname}' (disabled)"
+      else
+        echo "Running test: '${testname}'"
+        python $debug ${CONFIG_ROOT}/testrunner.py $verbosedebug -t ${RESULTDIR}/${testname%.*}.tap ${test} ${OUTPUTDIR}/${testname%.*}.out
+      fi
     fi
   done
 else
   test=`find ${TESTDIR} -name "*${testnumber}_*.yml"`
   testname=${test##*/}
   echo "Running test: '${testname}'"
-  python $debug ${CONFIG_ROOT}/testrunner.py -d -t ${RESULTDIR}/${testname%.*}.tap ${test} ${OUTPUTDIR}/${testname%.*}.out
+  python $debug ${CONFIG_ROOT}/testrunner.py $verbosedebug -t ${RESULTDIR}/${testname%.*}.tap ${test} ${OUTPUTDIR}/${testname%.*}.out
 fi
 
 echo "Copying logs..."

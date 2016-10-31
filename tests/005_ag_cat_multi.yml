@@ -1,0 +1,89 @@
+---
+
+- name: setup_ag_cat
+  type: setup
+  tmpdirs:
+    - name: 005_ag_cat
+      varname: config_dir
+  randnames:
+    - test_volume
+    - test_ag
+    - put_ug
+    - cat_ug
+  seqloop:
+    - name: cacheloop
+      quantity: 2
+  valueloop:            # loop over the values defined below
+    - name: randfile    # the name assigned to the valueloop data
+      values:
+        - name: local_file1
+          value: /tmp/syndicate-AG-dataset/local_file1
+        - name: local_file2
+          value: /tmp/syndicate-AG-dataset/local_file2
+        - name: local_file3
+          value: /tmp/syndicate-AG-dataset/local_file3
+  vars:
+    - name: syndicate_conf
+      value: $config_dir/syndicate.conf
+    - name: ag_driver
+      value: $SYNDICATE_PYTHON_ROOT/syndicate/ag/drivers/disk
+    - name: ag_path
+      value: $SYNDICATE_AG_ROOT/syndicate-ag
+    - name: put_path
+      value: $SYNDICATE_UG_ROOT/syndicate-put
+    - name: cat_path
+      value: $SYNDICATE_UG_ROOT/syndicate-cat
+  debug: off
+
+- name: make ag dataset
+  type: sequential
+  tasks:
+    - name: ag dataset
+      command: $tasksf_dir/mkagdataset.py $ag_driver None --no-secrets
+
+- name: create local files
+  type: sequential
+  loop_on: randfile
+  tasks:
+    - name: make local_file
+      command: $tasksf_dir/mkrandfile.py $randfile.value 16384
+
+- name: config
+  type: sequential
+  tasks:
+    - name: setup
+      command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS"
+
+    - name: add test volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name=$test_volume description="test volume" blocksize=1024 email=$SYNDICATE_ADMIN
+
+    - name: create AG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_ag type=AG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
+
+    - name: update AG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_ag caps=ALL port=31112 driver=$ag_driver
+
+- name: daemon AG
+  type: daemon
+  tasks:
+    - name: start AG
+      command: $ag_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_ag
+      sleep: 20
+      exit: 0
+
+- name: setup UGs
+  type: sequential
+  tasks:
+    - name: create cat UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$cat_ug type=UG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
+
+    - name: update cat UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$cat_ug caps=ALL
+
+- name: run ag cat tests
+  type: sequential
+  tasks:
+    - name: test cat
+      loop_on: cacheloop
+      command: $cat_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $cat_ug /local_file1 /local_file2 /local_file3
+      checkout: /tmp/syndicate-AG-dataset/local_file1 /tmp/syndicate-AG-dataset/local_file2 /tmp/syndicate-AG-dataset/local_file3

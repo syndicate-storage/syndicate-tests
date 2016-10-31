@@ -38,13 +38,13 @@
 
     - name: create private key for user
       command: openssl genrsa 4096
-      saveout: $config_dir/$random_user.au.pkey
+      saveout: $config_dir/${random_user}.au.pkey
 
     - name: create user with existing private key
-      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_user "$random_user.au" "$config_dir/$random_user.au.pkey"
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_user "${random_user}.au" "$config_dir/${random_user}.au.pkey"
 
     - name: delete user with existing private key
-      command: $SYNDICATE_TOOL -c "$syndicate_conf" delete_user "$random_user.au"
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" delete_user "${random_user}.au"
 
     - name: delete normal user
       command: $SYNDICATE_TOOL -c "$syndicate_conf" delete_user "$random_user"

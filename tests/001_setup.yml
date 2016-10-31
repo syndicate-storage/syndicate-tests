@@ -9,7 +9,7 @@
 - name: setup_test
   type: sequential
   tasks:
-    - name: configure syndicate 
+    - name: configure syndicate
       command: $SYNDICATE_TOOL --trust_public_key -c "${config_dir}/syndicate.conf" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS"
 
     - name: test for syndicate.conf
@@ -28,8 +28,8 @@
       command: test -d "${config_dir}/syndicate"
 
     - name: test for admin cert
-      command: test -f "${config_dir}/users/$SYNDICATE_ADMIN.cert"
+      command: test -f "${config_dir}/users/${SYNDICATE_ADMIN}.cert"
 
     - name: test for admin pkey
-      command: test -f "${config_dir}/users/$SYNDICATE_ADMIN.pkey"
+      command: test -f "${config_dir}/users/${SYNDICATE_ADMIN}.pkey"
 

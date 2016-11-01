@@ -6,11 +6,6 @@
 #   -n <test number>	run the test number specified
 #   -v                  enable verbose testrunner debug logs
 
-TESTDIR=./syndicate-tests
-RESULTDIR=./results
-OUTPUTDIR=./output
-BASH=/bin/bash
-
 debug=''
 if [[ $@ =~ -d ]]; then
   debug='-m pdb'

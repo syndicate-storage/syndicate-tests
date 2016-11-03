@@ -1,19 +1,22 @@
 ---
+# Acquisition Gateway read test
+# Description: Create an AG that initializes with 3 files as it's data set, create a UG to read the data, and confirm accuracy
 
-- name: setup_put_read
+- name: setup_ag_read_parallel
   type: setup
   tmpdirs:
-    - name: 013_put_read_parallel
+    - name: 014_ag_read_parallel
       varname: config_dir
   randnames:
     - test_volume
-    - test_rg
-    - put_ug
+    - test_ag
     - read_ug
-  seqloop:
+  seqloop:              # list from of ints from 0
     - name: threadnum
       quantity: 1
-  valueloop:            # loop over the values defined below
+    - name: cacheloop
+      quantity: 2
+  valueloop:            # list/dict with the name(s) and value(s) defined below
     - name: threadport
       values:
         - 31112
@@ -24,8 +27,10 @@
         - 31117
         - 31118
         - 31119
-    - name: test_ranges # the name assigned to the valueloop data
+    - name: test_ranges
       values:
+#        - start: 0
+#          stop: 16384
         - start: 1
           stop: 199     # 1 to 200
 #        - start: 0
@@ -54,22 +59,22 @@
 #          stop: 11000   # 16000 - 5000, 3 blocks, head and tail unaligned
   vars:
     - name: local_file
-      value: $config_dir/local_file
+      value: /tmp/syndicate-AG-dataset/local_file
     - name: syndicate_conf
       value: $config_dir/syndicate.conf
-    - name: rg_driver
-      value: $SYNDICATE_PYTHON_ROOT/syndicate/rg/drivers/disk
-    - name: rg_path
-      value: $SYNDICATE_RG_ROOT/syndicate-rg
-    - name: put_path
-      value: $SYNDICATE_UG_ROOT/syndicate-put
+    - name: ag_driver
+      value: $SYNDICATE_PYTHON_ROOT/syndicate/ag/drivers/disk
+    - name: ag_path
+      value: $SYNDICATE_AG_ROOT/syndicate-ag
     - name: read_path
       value: $SYNDICATE_UG_ROOT/syndicate-read
+  debug: disable verbose stdout stderr
 
-  debug: disabled verbose stderr   #options:  off = disable debug options
-                   #         show = do not execute commands, just show them
-                   #        break = set a break point here
-                   #      verbose = enable verbose debug output
+- name: create ag dataset
+  type: sequential
+  tasks:
+    - name: make an AG dataset area/path #the path is defined by the AG, e.g. /tmp/syndicate-AG-dataset
+      command: $tasksf_dir/mkagdataset.py $ag_driver --no-secrets None #mkagdataset.py <driver path> <--secrets|--no-secrets> <gateway privkey pem>
 
 - name: config
   type: sequential
@@ -81,37 +86,23 @@
       command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS"
 
     - name: add test volume config
-      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name=$test_volume description="test volume" blocksize=4096 email=$SYNDICATE_ADMIN
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name=$test_volume description="test volume" blocksize=1024 email=$SYNDICATE_ADMIN
 
-    - name: create RG config
-      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_rg type=RG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=32110
+    - name: create AG config
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_ag type=AG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
 
-    - name: update RG config
-      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_rg caps=ALL driver=$rg_driver
+    - name: update AG config
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_ag caps=ALL port=31112 driver=$ag_driver
 
-- name: daemon RG
+- name: daemon AG
   type: daemon
   tasks:
-    - name: start RG
-      command: $rg_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_rg
+    - name: start AG
+      command: $ag_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_ag
+      sleep: 20
       exit: 0
 
 - name: setup UGs
-  type: sequential
-  tasks:
-    - name: create put UG config
-      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$put_ug type=UG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31110
-
-    - name: update put UG config
-      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$put_ug caps=ALL
-
-- name: run put tests
-  type: sequential
-  tasks:
-    - name: test put
-      command: $put_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $put_ug $local_file /put-out-read
-
-- name: configure read UG for all threads
   type: sequential
   loop_on: threadnum
   tasks:
@@ -127,5 +118,5 @@
   tasks:
     - name: parallel read
       loop_on: test_ranges
-      command: $read_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $read_ug-$threadnum /put-out-read $test_ranges.start $test_ranges.stop
+      command: $read_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $read_ug-$threadnum /local_file $test_ranges.start $test_ranges.stop
       rangecheckout: $local_file $test_ranges.start $test_ranges.stop

@@ -1,31 +1,16 @@
 ---
-# Acquisition Gateway cat test
+# Acquisition Gateway read test
 # Description: Create an AG that initializes with 3 files as it's data set, create a UG to cat the data, and confirm accuracy
 
-- name: setup_ag_ls_tree_timeout
+- name: setup_ag_rmtree_cat
   type: setup
   tmpdirs:
-    - name: 006_ag_ls_tree_timeout
+    - name: 018_ag_rmtree_cat
       varname: config_dir
   randnames:
     - test_volume
     - test_ag
-    - put_ug
     - cat_ug
-  seqloop:              # list from of ints from 0
-    - name: lsnumloop
-      quantity: 3
-  valueloop:            # list/dict with the name(s) and value(s) defined below
-    - name: lsloop
-      values:
-        - /dir1
-        - /dir1/dir2
-        - /dir1/dir2/local_file
-    - name: lscontainsloop
-      values:
-        - dir1
-        - dir2
-        - local_file
   vars:
     - name: syndicate_conf
       value: $config_dir/syndicate.conf
@@ -35,6 +20,10 @@
       value: $SYNDICATE_AG_ROOT/syndicate-ag
     - name: ls_path
       value: $SYNDICATE_UG_ROOT/syndicate-ls
+    - name: cat_path
+      value: $SYNDICATE_UG_ROOT/syndicate-cat
+    - name: refresh_path
+      value: $SYNDICATE_UG_ROOT/syndicate-refresh
   debug: off
 
 - name: create ag dataset
@@ -43,14 +32,14 @@
     - name: make an AG dataset area/path #the path is defined by the AG, e.g. /tmp/syndicate-AG-dataset
       command: $tasksf_dir/mkagdataset.py $ag_driver --no-secrets None #mkagdataset.py <driver path> <--secrets|--no-secrets> <gateway privkey pem>
 
-- name: create local files
+- name: create path and file
   type: sequential
   tasks:
-    - name: make dir1/dir2 path
-      command: mkdir -p /tmp/syndicate-AG-dataset/dir1/dir2
-    
+    - name: make to_remove1/to_remove2/to_remove3 path
+      command: mkdir -p /tmp/syndicate-AG-dataset/to_remove1/to_remove2/to_remove3
+
     - name: make random file in the AG dataset path
-      command: $tasksf_dir/mkrandfile.py /tmp/syndicate-AG-dataset/dir1/dir2/local_file 16384
+      command: $tasksf_dir/mkrandfile.py /tmp/syndicate-AG-dataset/to_remove1/to_remove2/to_remove3/local_file1 16384
 
 - name: config
   type: sequential
@@ -59,7 +48,7 @@
       command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS"
 
     - name: add test volume config
-      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name=$test_volume description="test volume" blocksize=1024 email=$SYNDICATE_ADMIN
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name=$test_volume description="test volume" blocksize=4096 email=$SYNDICATE_ADMIN
 
     - name: create AG config
       command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_ag type=AG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
@@ -76,27 +65,38 @@
     - name: update cat UG config
       command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$cat_ug caps=ALL
 
-- name: run ls test before activating the ag
-  type: sequential
-  loop_on: lsloop
-  tasks:
-    - name: test ls
-      command: $ls_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $cat_ug $lsloop
-      containserr:  #expect an error, so look in stderr for the string below
-          - "Failed to stat '$lsloop'"
-
 - name: daemon AG
   type: daemon
   tasks:
     - name: start AG
       command: $ag_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_ag
-      sleep: 20
+      sleep: 10
       exit: 0
 
-- name: run ls test after activating the ag
+- name: delete path and file
   type: sequential
-  loop_on: lsnumloop
+  tasks:
+    - name: recursively remove to_remove1
+      command: rm -rf /tmp/syndicate-AG-dataset/to_remove1
+
+- name: refresh dataset
+  type: sequential
+  tasks:
+    - name: refresh dataset 
+      command: $refresh_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $cat_ug /to_remove1
+      sleep: 10
+
+- name: run ag cat test
+  type: sequential
+  tasks:
+    - name: test cat
+      command: $cat_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $cat_ug /to_remove1/to_remove2/to_remove3/local_file
+      exit: 1
+      containserr: "Failed to open /to_remove1/to_remove2/to_remove3/local_file: No such file or directory" 
+
+- name: run ls test after cat test
+  type: sequential
   tasks:
     - name: test ls
-      command: $ls_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $cat_ug $lsloop[$lsnumloop]
-      containsout: $lscontainsloop[$lsnumloop]
+      command: $ls_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $cat_ug /to_remove1
+      containserr: "Failed to stat '/to_remove1': No such file or directory"

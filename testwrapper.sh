@@ -45,7 +45,7 @@ if [ $testnumber -eq 0 ]; then
       fi
     fi
     if [ $runtest == 1 ]; then
-      if [[ -n `cat $test | grep "debug:.*disabled"` ]]; then
+      if [[ -n `cat $test | grep "debug:.*disable"` ]]; then
         echo "Skipping test: '${testname}' (disabled)"
       else
         echo "Running test: '${testname}'"

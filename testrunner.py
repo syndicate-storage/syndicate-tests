@@ -452,11 +452,11 @@ class CommandRunner():
             if dq_item['stream'] == "o":
                 stdout_str += dq_item['line']
                 if 'stdout' in debugoptions: 
-                    print("STDOUT: %s" % dq_item['line'].rstrip())
+                    print("  STDOUT: %s" % dq_item['line'].rstrip())
             elif dq_item['stream'] == "e":
                 stderr_str += dq_item['line']
                 if 'stderr' in debugoptions: 
-                    print("STDERR: %s" % dq_item['line'].rstrip())
+                    print("  STDERR: %s" % dq_item['line'].rstrip())
             else:
                 raise Exception("Unknown stream: %s" % dq_item['stream'])
 

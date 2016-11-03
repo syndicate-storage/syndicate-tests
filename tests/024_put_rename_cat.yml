@@ -1,23 +1,21 @@
 ---
 
-- name: setup_put_cat
+- name: setup_put_rename_cat
   type: setup
   tmpdirs:
-    - name: 011_put_cat_multi
+    - name: 024_put_rename_cat
       varname: config_dir
   randnames:
     - test_volume
     - test_rg
     - put_ug
     - cat_ug
-  randloop:
-    - name: test_cattimes
-      quantity: 1
+  seqloop:
+    - name: test_seq
+      quantity: 2
   vars:
-    - name: local_file1
-      value: $config_dir/local_file1
-    - name: local_file2
-      value: $config_dir/local_file2
+    - name: local_file
+      value: $config_dir/local_file
     - name: syndicate_conf
       value: $config_dir/syndicate.conf
     - name: rg_driver
@@ -28,16 +26,17 @@
       value: $SYNDICATE_UG_ROOT/syndicate-put
     - name: cat_path
       value: $SYNDICATE_UG_ROOT/syndicate-cat
+    - name: mkdir_path
+      value: $SYNDICATE_UG_ROOT/syndicate-mkdir
+    - name: rename_path
+      value: $SYNDICATE_UG_ROOT/syndicate-rename
   debug: off
 
 - name: config
   type: sequential
   tasks:
-    - name: make local_file1
-      command: $tasksf_dir/mkrandfile.py $local_file1 16384
-
-    - name: make local_file2
-      command: $tasksf_dir/mkrandfile.py $local_file2 16384
+    - name: make local_file
+      command: $tasksf_dir/mkrandfile.py $local_file 16384
 
     - name: setup
       command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS"
@@ -73,16 +72,35 @@
     - name: update cat UG
       command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$cat_ug caps=ALL
 
-- name: run put/cat tests
+- name: run put test
   type: sequential
+  loop_on: test_seq
   tasks:
     - name: test put
-      command: $put_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $put_ug $local_file1 /syndicate-put1 $local_file2 /syndicate-put2
+      command: $put_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $put_ug $local_file /put-$test_seq
 
-- name: run put/cat tests
+- name: run mkdir test
   type: sequential
-  loop_on: test_cattimes
   tasks:
-    - name: test cat
-      command: $cat_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $cat_ug /syndicate-put1 /syndicate-put2
-      checkout: $local_file1 $local_file2
+    - name: test mkdir
+      command: $mkdir_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $put_ug /newdir
+
+- name: run rename test
+  type: sequential
+  tasks:
+    - name: test rename same path
+      command: $rename_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $put_ug /put-0 /put-0-renamed
+
+    - name: test rename new path
+      command: $rename_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $put_ug /put-1 /newdir/put-1-renamed
+
+- name: run cat renamed test in same and new paths
+  type: sequential
+  tasks:
+    - name: test cat renamed in same path
+      command: $cat_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $cat_ug /put-0-renamed
+      checkout: $local_file
+
+    - name: test cat renamed in new path
+      command: $cat_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $cat_ug /newdir/put-1-renamed
+      checkout: $local_file

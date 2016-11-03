@@ -1,18 +1,18 @@
 ---
 
-- name: setup_put_rename_cat
+- name: setup_put_cat
   type: setup
   tmpdirs:
-    - name: 014_put_rename_cat
+    - name: 020_put_cat
       varname: config_dir
   randnames:
     - test_volume
     - test_rg
     - put_ug
     - cat_ug
-  seqloop:
-    - name: test_seq
-      quantity: 2
+  randloop:              # list of random strings starting from 0
+    - name: test_fnames
+      quantity: 10
   vars:
     - name: local_file
       value: $config_dir/local_file
@@ -26,28 +26,24 @@
       value: $SYNDICATE_UG_ROOT/syndicate-put
     - name: cat_path
       value: $SYNDICATE_UG_ROOT/syndicate-cat
-    - name: mkdir_path
-      value: $SYNDICATE_UG_ROOT/syndicate-mkdir
-    - name: rename_path
-      value: $SYNDICATE_UG_ROOT/syndicate-rename
   debug: off
 
 - name: config
   type: sequential
   tasks:
-    - name: make local_file
+    - name: make random local_file
       command: $tasksf_dir/mkrandfile.py $local_file 16384
 
-    - name: setup
+    - name: setup security config
       command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS"
 
-    - name: add test volume
+    - name: add test volume config
       command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name=$test_volume description="test volume" blocksize=4096 email=$SYNDICATE_ADMIN
 
-    - name: create RG
+    - name: create RG config
       command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_rg type=RG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
 
-    - name: update RG
+    - name: update RG config
       command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_rg caps=ALL port=31112 driver=$rg_driver
 
 - name: daemon RG
@@ -60,47 +56,25 @@
 - name: setup UGs
   type: sequential
   tasks:
-    - name: create put UG
+    - name: create put UG config
       command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$put_ug type=UG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
 
-    - name: update put UG
+    - name: update put UG config
       command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$put_ug caps=ALL
 
-    - name: create cat UG
+    - name: create cat UG config
       command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$cat_ug type=UG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
 
-    - name: update cat UG
+    - name: update cat UG config
       command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$cat_ug caps=ALL
 
-- name: run put test
+- name: run put/cat tests
   type: sequential
-  loop_on: test_seq
+  loop_on: test_fnames
   tasks:
     - name: test put
-      command: $put_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $put_ug $local_file /put-$test_seq
+      command: $put_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $put_ug $local_file /$loop_var
 
-- name: run mkdir test
-  type: sequential
-  tasks:
-    - name: test mkdir
-      command: $mkdir_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $put_ug /newdir
-
-- name: run rename test
-  type: sequential
-  tasks:
-    - name: test rename same path
-      command: $rename_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $put_ug /put-0 /put-0-renamed
-
-    - name: test rename new path
-      command: $rename_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $put_ug /put-1 /newdir/put-1-renamed
-
-- name: run cat renamed test in same and new paths
-  type: sequential
-  tasks:
-    - name: test cat renamed in same path
-      command: $cat_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $cat_ug /put-0-renamed
-      checkout: $local_file
-
-    - name: test cat renamed in new path
-      command: $cat_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $cat_ug /newdir/put-1-renamed
+    - name: test cat
+      command: $cat_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $cat_ug /$loop_var
       checkout: $local_file

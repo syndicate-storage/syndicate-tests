@@ -17,35 +17,49 @@
   valueloop:            # list/dict with the name(s) and value(s) defined below
     - name: test_ranges
       values:
-        - start: 1
-          stop: 199     # 1 to 200
-        - start: 0
-          stop: 4096    # 1 block, aligned
-        - start: 0
-          stop: 8192    # 2 blocks, aligned
-        - start: 0
-          stop: 1000    # 1 block, tail unaligned
-        - start: 0
-          stop: 6000    # 2 blocks, tail unaligned
-        - start: 100
-          stop: 3900    # 4000 - 100,   1 block, head unaligned
-        - start: 5000
-          stop: 5000    # 10000 - 5000, 2 blocks, head and tail unaligned
-        - start: 4096
-          stop: 5904    # 10000 - 4096, 2 blocks, tail unaligned
-        - start: 5000
-          stop: 3192    # 8192 - 5000,  2 blocks, head unalighed
-        - start: 4096
-          stop: 12738   # 16834 - 4096, 3 blocks, aligned
-        - start: 5000
-          stop: 11384   # 16384 - 5000, 3 blocks, head unaligned
-        - start: 4096
-          stop: 11904   # 16000 - 4096, 3 blocks, tail unaligned
-        - start: 5000
-          stop: 11000   # 16000 - 5000, 3 blocks, head and tail unaligned
+        - offset: 1
+          length: 199     # 1 to 200
+        - offset: 0
+          length: 4096    # 1 block, aligned
+        - offset: 0
+          length: 8192    # 2 blocks, aligned
+        - offset: 0
+          length: 1000    # 1 block, tail unaligned
+        - offset: 0
+          length: 6000    # 2 blocks, tail unaligned
+        - offset: 100
+          length: 3900    # 4000 - 100,   1 block, head unaligned
+        - offset: 5000
+          length: 5000    # 10000 - 5000, 2 blocks, head and tail unaligned
+        - offset: 4096
+          length: 5904    # 10000 - 4096, 2 blocks, tail unaligned
+        - offset: 5000
+          length: 3192    # 8192 - 5000,  2 blocks, head unalighed
+        - offset: 4096
+          length: 12738   # 16834 - 4096, 3 blocks, aligned
+        - offset: 5000
+          length: 11384   # 16384 - 5000, 3 blocks, head unaligned
+        - offset: 4096
+          length: 11904   # 16000 - 4096, 3 blocks, tail unaligned
+        - offset: 5000
+          length: 11000   # 16000 - 5000, 3 blocks, head and tail unaligned
+    - name: large_test_ranges
+      values:
+        - offset: 0
+          length: 1000000
+        - offset: 0
+          length: 1500000
+        - offset: 500000
+          length: 1000000
+        - offset: 1000000
+          length: 1000000
+        - offset: 1500000
+          length: 500000
   vars:
     - name: local_file
       value: /tmp/syndicate-AG-dataset/local_file
+    - name: large_local_file
+      value: /tmp/syndicate-AG-dataset/large_local_file
     - name: syndicate_conf
       value: $config_dir/syndicate.conf
     - name: ag_driver
@@ -54,7 +68,7 @@
       value: $SYNDICATE_AG_ROOT/syndicate-ag
     - name: read_path
       value: $SYNDICATE_UG_ROOT/syndicate-read
-  debug: verbose
+  debug: off
 
 - name: create ag dataset
   type: sequential
@@ -67,6 +81,9 @@
   tasks:
     - name: make random local_file
       command: $tasksf_dir/mkrandfile.py $local_file 16384
+    
+    - name: make random local_file
+      command: $tasksf_dir/mkrandfile.py $large_local_file 2000000
 
     - name: setup security config
       command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS"
@@ -92,7 +109,7 @@
 - name: daemon AG
   type: daemon
   tasks:
-    - name: start AG
+    - name: offset AG
       command: $ag_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_ag
       sleep: 20
       exit: 0
@@ -103,5 +120,14 @@
   tasks:
     - name: test read
       loop_on: cacheloop #nested loop, cache first iteration
-      command: $read_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $read_ug /local_file $test_ranges.start $test_ranges.stop
-      rangecheckout: $local_file $test_ranges.start $test_ranges.stop
+      command: $read_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $read_ug /local_file $test_ranges.offset $test_ranges.length
+      rangecheckout: $local_file $test_ranges.offset $test_ranges.length
+
+- name: read tests
+  type: sequential
+  loop_on: large_test_ranges
+  tasks:
+    - name: test read
+      loop_on: cacheloop #nested loop, cache first iteration
+      command: $read_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $read_ug /large_local_file $large_test_ranges.offset $large_test_ranges.length
+      rangecheckout: $large_local_file $large_test_ranges.offset $large_test_ranges.length

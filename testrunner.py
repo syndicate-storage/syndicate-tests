@@ -37,7 +37,7 @@ logger = logging.getLogger()
 global args
 global r_vars  # dict of replacement vars
 global loop_vars  # dict of arrays of vars to loop tasks on
-global debugoptions # debug options
+global debughelper  # help with debugging
 
 
 def parse_args():
@@ -311,7 +311,7 @@ class CommandRunner():
     def run(self):
 
         global r_vars
-        global debugoptions
+        global debughelper
 
         # $task_name is name of current task
         r_vars['task_name'] = self.task['name']
@@ -333,26 +333,31 @@ class CommandRunner():
                 logger.error("infile '%s' is not a file" % in_fname)
                 sys.exit(1)
 
-        if self.run_in_shell:
+        debughelper.Check(self.task)
+        if debughelper.rundebug:
+            command = debughelper.ModifyCommand(command)
+            logger.debug("Running Task '%s': `%s` in shell" % (self.task['name'], command))
+            subprocess.call(shlex.split(command)) 
+        elif self.run_in_shell:
             # pass command as string if running in a shell
             logger.debug("Running Task '%s': `%s` in shell" % (self.task['name'], command))
             run_params['shell'] = True
-            if 'show' in debugoptions:
-                print ("Execute (sh): '%s': `%s`" % (self.task['name'], command))
+            if debughelper.show:
+                print ("Execute (sh): <Task> '%s': <Command> `%s`" % (self.task['name'], command))
             else:
                 self.p = subprocess.Popen(command, **run_params)
         else:
             # split command into array for running directly
-            logger.debug("Running Task '%s': `%s`" % (self.task['name'], command))
             c_array = shlex.split(command)
-            if 'show' in debugoptions:
-                print ("Execute: '%s': `%s`" % (self.task['name'], command))
+            logger.debug("Running Task '%s': `%s`" % (self.task['name'], command))
+            if debughelper.show:
+                print ("Execute: <Task> '%s': <Command> `%s`" % (self.task['name'], command))
             else:
                 self.p = subprocess.Popen(c_array, **run_params)
 
         self.start_t = time.time()
 
-        if 'show' not in debugoptions:
+        if not debughelper.show:
             self.out_th = threading.Thread(
                         target=self.__pipe_reader,
                         args=(self.p.stdout, "o",
@@ -372,14 +377,14 @@ class CommandRunner():
         # optional sleep after execution
         if 'sleep' in self.task:
             logger.debug("Sleeping for %s seconds" % self.task['sleep'])
-            if 'show' not in debugoptions:
+            if not debughelper.show:
                 time.sleep(int(self.task['sleep']))
 
 
     def terminate(self):
 
         # check to see if already exited, send terminate signal otherwise
-        if 'show' not in debugoptions:
+        if not debughelper.show:
             retcode = self.p.poll()
 
             if retcode is not None:
@@ -414,8 +419,8 @@ class CommandRunner():
 
     def finish(self, tap_writer):
 
-        global debugoptions
-        if 'show' in debugoptions:
+        global debughelper
+        if debughelper.show:
             return
 
         failures = []
@@ -451,12 +456,10 @@ class CommandRunner():
         for dq_item in self.q:
             if dq_item['stream'] == "o":
                 stdout_str += dq_item['line']
-                if 'stdout' in debugoptions: 
-                    print("  STDOUT: %s" % dq_item['line'].rstrip())
+                debughelper.stdOut("  STDOUT: %s" % dq_item['line'].rstrip())
             elif dq_item['stream'] == "e":
                 stderr_str += dq_item['line']
-                if 'stderr' in debugoptions: 
-                    print("  STDERR: %s" % dq_item['line'].rstrip())
+                debughelper.stdErr("  STDERR: %s" % dq_item['line'].rstrip())
             else:
                 raise Exception("Unknown stream: %s" % dq_item['stream'])
 
@@ -518,7 +521,7 @@ class CommandRunner():
             else:
                 checkout_fail = ("Task '%s' stdout does not match contents of '%s'" %
                                  (self.task['name'], checkout_files))
-                if 'verbose' in debugoptions: 
+                if debughelper.verbose: 
                     logger.debug("Task '%s' stdout was: '%s'" %
                                 (self.task['name'], stdout_str))
                     logger.debug("Task '%s' stdout should be: '%s'" %
@@ -553,16 +556,15 @@ class CommandRunner():
 
             with open(rangecheckout_fname) as fin:
                 fin.seek(offset)
-                data = fin.read(length)
-                if 'stdout' in debugoptions: 
-                    logger.debug("STDOUT: '%s'" % stdout_str)
+                data = fin.read(length) #assumes length is how much to read before lengthping
+                debughelper.stdOut("  STDOUT: '%s'" % stdout_str)
                 if stdout_str == data:
                     logger.debug("Task '%s' stdout matches contents within '%s' between %d and %d" %
                              (self.task['name'], rangecheckout_fname, offset, offset + length))
                 else:
                     rangecheckout_fail = ("Task '%s' STDOUT does not match contents of '%s' between %d and %d" %
                              (self.task['name'], rangecheckout_fname, offset, offset + length))
-                    if 'verbose' in debugoptions: 
+                    if debughelper.verbose: 
                         logger.debug("Task '%s' stdout was: '%s'" %
                                     (self.task['name'], stdout_str))
                         logger.debug("Task '%s' stdout between %d and %d should be: '%s'" %
@@ -612,7 +614,7 @@ class CommandRunner():
                                      (self.task['name'], rpattern))
                     logger.error(containsout_fail)
                     failures.append(containsout_fail)
-            if 'verbose' in debugoptions: 
+            if debughelper.verbose: 
                 logger.debug("Task '%s' stdout was: '%s'" %
                             (self.task['name'], stdout_str))
         
@@ -633,7 +635,7 @@ class CommandRunner():
                                      (self.task['name'], pattern))
                     logger.error(containserr_fail)
                     failures.append(containserr_fail)
-            if 'verbose' in debugoptions: 
+            if debughelper.verbose: 
                 logger.debug("Task '%s' stderr was: '%s'" %
                             (self.task['name'], stderr_str))
 
@@ -666,7 +668,7 @@ class RunParallel():
             logger.error("No tasks in taskblock '%s'" % taskblock['name'])
             sys.exit(1)
 
-        self.breakcheck(taskblock) #break in debugger if "debug: break" is in this taskblock
+        debughelper.Check(taskblock) #check "debug:" for options, break in py-debugger if "debug: break" is in this taskblock
 
         if 'loop_on' in taskblock:
             if taskblock['loop_on'] in loop_vars:
@@ -755,7 +757,7 @@ class RunParallel():
 
     def run(self):
         for task in self.tasks:
-            self.breakcheck(task) #break in debugger if "debug: break" is in this task
+            debughelper.Check(task) #check "debug:" for options, break in py-debugger if "debug: break" is in this taskblock
             cr = CommandRunner(task, self.taskblock_name)
             self.runners.append({"name": task['name'], "cr": cr})
             cr.run()
@@ -763,17 +765,12 @@ class RunParallel():
         for runner in self.runners:
             self.run_out.append(runner['cr'].finish(self.tap_writer))
 
-    def breakcheck(self, section):
-        if 'debug' in section:
-            if 'break' in section['debug']:
-                pdb.set_trace() #debugger break
-
 
 class RunSequential(RunParallel):
 
     def run(self):
         for task in self.tasks:
-            self.breakcheck(task) #break in debugger if "debug: break" is in this task
+            debughelper.Check(task) #check "debug:" for options, break in py-debugger if "debug: break" is in this taskblock
             cr = CommandRunner(task, self.taskblock_name)
             cr.run()
             self.run_out.append(cr.finish(self.tap_writer))
@@ -783,7 +780,7 @@ class RunDaemon(RunParallel):
 
     def run(self):
         for task in self.tasks:
-            self.breakcheck(task) #break in debugger if "debug: break" is in this task
+            debughelper.Check(task) #check "debug:" for options, break in py-debugger if "debug: break" is in this taskblock
             cr = CommandRunner(task, self.taskblock_name)
             self.runners.append({"name": task['name'], "cr": cr})
             cr.run()
@@ -919,7 +916,7 @@ class TaskBlocksRunner():
 
     def setup_block(self, setupb):
 
-        global debugoptions
+        global debughelper
 
         if 'tmpdirs' in setupb:
             for tdir in setupb['tmpdirs']:
@@ -967,12 +964,7 @@ class TaskBlocksRunner():
 
                 valueloop(vloop['name'], vloop['values'])
 
-        if 'debug' in setupb:
-            debugoptions = str(setupb['debug'])
-            if 'verbose' in debugoptions:
-                logger.setLevel(logging.DEBUG) #turn on debug verbosity if specified in the yaml file
-            if 'break' in debugoptions:
-                pdb.set_trace() #debugger break
+        debughelper = DebugHelper(setupb)
 
     def run_task_blocks(self):
 
@@ -992,8 +984,8 @@ class TaskBlocksRunner():
     def print_timesorted(self, output_file):
 
         global args
-        global debugoptions
-        if 'show' in debugoptions:
+        global debughelper
+        if debughelper.show:
             return
 
         all_output = itertools.chain()
@@ -1007,6 +999,61 @@ class TaskBlocksRunner():
         for dq_item in sorted_outs:
             output_file.write(CommandRunner.decorate_output(dq_item) + "\n")
 
+
+class DebugHelper():
+
+    def __init__(self, section):
+
+        self.debugcmd = ''
+        self.debugger = ''
+        self.rundebug = False
+        self.show = False
+        self.verbose = False
+        self.stdoutoption = False
+        self.stderroption = False
+        self.Check(section)
+    
+    def Check(self, section):
+        if 'debug' in section and section['debug'] is not False:
+            if 'show' in section['debug']:
+                self.show = True
+            if 'stdout' in section['debug']:
+                self.stdoutoption = True
+            if 'stderr' in section['debug']:
+                self.stderroption = True
+            if 'verbose' in section['debug']:
+                self.verbose = True
+                logger.setLevel(logging.DEBUG) #turn on debug verbosity if specified in the yaml file
+            if 'gdb' in section['debug'] or 'ddd' in section['debug']:
+                self.rundebug = True
+                debugcmdlist = shlex.split(section['debug'])
+                self.debugger = debugcmdlist.pop(0)
+                self.debugcmd = 'set breakpoint pending on\n' + ' '.join(debugcmdlist)
+            else:
+                self.rundebug = False
+                if 'break' in section['debug']:
+                    pdb.set_trace() #debugger break
+
+    def ModifyCommand(self, command):
+        c_array = shlex.split(command)        
+        newcmd=shlex.split(self.debugger + ' --command=debug.cmd ' + c_array.pop(0))
+        c_array.insert(0,'run')
+        gdbf = open('debug.cmd','w')
+        gdbf.write(self.debugcmd + '\n')
+        gdbf.write(' '.join(c_array)) #gdb/ddd loads a command file before running, if specified
+        logger.debug("Debugger will run:\n%s\n%s" % (self.debugcmd, ' '.join(c_array)))
+        return ' '.join(newcmd)
+
+    def stdErr(self, string):
+        if self.stderroption:
+            print(string)
+
+    def stdOut(self, string):
+        if self.stdoutoption:
+            print(string)
+
+
+
 if __name__ == "__main__":
     parse_args()
     import_env()
@@ -1014,10 +1061,9 @@ if __name__ == "__main__":
     global args
     global r_vars
     global loop_vars
-    global debugoptions
+    global debughelper
 
     loop_vars = {}
-    debugoptions = []
 
     if args.debug:
         logger.setLevel(logging.DEBUG)

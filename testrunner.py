@@ -543,25 +543,25 @@ class CommandRunner():
                 failures.append(checkerr_fail)
 
         if 'rangecheckout' in self.task:
-            rangecheckout_fname,start_str,stop_str = replace_vars(self.task['rangecheckout']).split()
-            start=int(start_str)
-            stop=int(stop_str)
+            rangecheckout_fname,offset_str,length_str = replace_vars(self.task['rangecheckout']).split()
+            offset=int(offset_str)
+            length=int(length_str)
             if not os.path.isfile(rangecheckout_fname):
                 logger.error("Task '%s', nonexistant rangecheckout file '%s'" %
                              (self.task['name'], rangecheckout_fname))
                 sys.exit(1)
 
             with open(rangecheckout_fname) as fin:
-                fin.seek(start)
-                data = fin.read(stop) #assumes stop is how much to read before stopping
+                fin.seek(offset)
+                data = fin.read(length)
                 if 'stdout' in debugoptions: 
                     logger.debug("STDOUT: '%s'" % stdout_str)
                 if stdout_str == data:
                     logger.debug("Task '%s' stdout matches contents within '%s' between %d and %d" %
-                             (self.task['name'], rangecheckout_fname, start, start + stop))
+                             (self.task['name'], rangecheckout_fname, offset, offset + length))
                 else:
                     rangecheckout_fail = ("Task '%s' STDOUT does not match contents of '%s' between %d and %d" %
-                             (self.task['name'], rangecheckout_fname, start, start + stop))
+                             (self.task['name'], rangecheckout_fname, offset, offset + length))
                     if 'verbose' in debugoptions: 
                         logger.debug("Task '%s' stdout was: '%s'" %
                                     (self.task['name'], stdout_str))

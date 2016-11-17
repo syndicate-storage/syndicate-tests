@@ -35,7 +35,7 @@
       value: $SYNDICATE_AG_ROOT/syndicate-ag
     - name: ls_path
       value: $SYNDICATE_UG_ROOT/syndicate-ls
-  debug: verbose
+  debug: off
 
 - name: create ag dataset
   type: sequential

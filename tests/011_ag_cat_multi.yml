@@ -33,7 +33,7 @@
       value: $SYNDICATE_UG_ROOT/syndicate-put
     - name: cat_path
       value: $SYNDICATE_UG_ROOT/syndicate-cat
-  debug: verbose
+  debug: off
 
 - name: make ag dataset
   type: sequential

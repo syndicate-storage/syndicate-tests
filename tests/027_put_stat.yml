@@ -78,6 +78,6 @@
         - 'mode:     540'
         - 'type:     1'
         - 'name:     put-stat'
-        - 'num_chld: -1'
+        - 'num_chld: 0'
         - 'capacity: 16'
         - 'parent:   0'

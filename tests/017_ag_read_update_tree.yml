@@ -152,7 +152,7 @@
 - name: refresh dataset
   type: sequential
   tasks:
-    - name: refresh dataset with new /dir1/dir3 contents
+    - name: refresh dataset with new /dir1 contents
       command: $refresh_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $read_ug /dir1
     
     - name: refresh dataset with new /dir1/dir3 contents

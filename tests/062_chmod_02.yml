@@ -92,9 +92,10 @@
       command: fstest unlink ${name242}
       compareout: "0"
 
-    # expect ENAMETOOLONG chmod ${name256} 0620
-    - name: T1 - expect ENAMETOOLONG chmod [name256] 0620
-      command: fstest chmod ${name256} 0620
-      compareout: "ENAMETOOLONG"
-      exit: 1
+# Syndicate allows filenames longer than 255 characters
+#   # expect ENAMETOOLONG chmod ${name256} 0620
+#   - name: T1 - expect ENAMETOOLONG chmod [name256] 0620
+#     command: fstest chmod ${name256} 0620
+#     compareout: "ENAMETOOLONG"
+#     exit: 1
 

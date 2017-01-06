@@ -134,10 +134,11 @@
       command: fstest stat ${n0} ctime
       saveout: $config_dir/2_ctime
 
-    # test_check $time -lt $ctime
-    - name: T2 - test_check [time] -lt [ctime]
-      command: $tasksf_dir/cmptimestamps.py lt -f $config_dir/2_time $config_dir/2_ctime
-      exit: 0
+# ctime isn't changed on parent directories when descendents are changed in syndicate
+#   # test_check $time -lt $ctime
+#   - name: T2 - test_check [time] -lt [ctime]
+#     command: $tasksf_dir/cmptimestamps.py lt -f $config_dir/2_time $config_dir/2_ctime
+#     exit: 0
 
     # expect 0 rmdir ${n0}
     - name: T2 - expect 0 rmdir [n0]

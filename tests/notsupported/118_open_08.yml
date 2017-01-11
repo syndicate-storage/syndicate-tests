@@ -64,11 +64,8 @@
   type: sequential
   tasks:
     - name: wait for syndicatefs to be mounted
-      command: sleep 5s
-
-    - name: test filesystem type
-      command: stat -f -L -c %T $mount_dir
-      compareout: "fuseblk"
+      command: $tasksf_dir/waitfusemount.py syndicatefs $mount_dir 20
+      exit: 0
 
 - name: run open tests 08
   type: sequential

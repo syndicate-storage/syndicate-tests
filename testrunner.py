@@ -336,8 +336,8 @@ class CommandRunner():
         debughelper.Check(self.task)
         if debughelper.rundebug:
             command = debughelper.ModifyCommand(command)
-            logger.debug("Running Task '%s': `%s` in shell" % (self.task['name'], command))
-            subprocess.call(shlex.split(command)) 
+            logger.debug("Running Task '%s': `%s`" % (self.task['name'], command))
+            self.p = subprocess.Popen(shlex.split(command)) 
         elif self.run_in_shell:
             # pass command as string if running in a shell
             logger.debug("Running Task '%s': `%s` in shell" % (self.task['name'], command))
@@ -357,7 +357,7 @@ class CommandRunner():
 
         self.start_t = time.time()
 
-        if not debughelper.show:
+        if not debughelper.show and not debughelper.rundebug:
             self.out_th = threading.Thread(
                         target=self.__pipe_reader,
                         args=(self.p.stdout, "o",
@@ -425,11 +425,14 @@ class CommandRunner():
 
         failures = []
 
-        self.out_th.join()
-        self.err_th.join()
+        if not debughelper.rundebug:
+            self.out_th.join()
+            self.err_th.join()
+
         self.p.wait()
 
-        logger.debug("Duration of task '%s': %.6f" %
+        if not debughelper.rundebug:
+            logger.debug("Duration of task '%s': %.6f" %
                      (self.task['name'], self.duration()))
 
         # $task_name is name of current task
@@ -641,15 +644,16 @@ class CommandRunner():
 
         if tap_writer:
 
-            yaml_data = {"duration_ms": "%.6f" % self.duration(1000),
-                         "command": self.task['repl_command']}
-            testname = "%s : %s" % (self.taskb_name, self.task['name'])
+            if not debughelper.rundebug:
+                yaml_data = {"duration_ms": "%.6f" % self.duration(1000),
+                             "command": self.task['repl_command']}
+                testname = "%s : %s" % (self.taskb_name, self.task['name'])
 
-            if failures:
-                yaml_data["failures"] = failures
-                tap_writer.record_test(False, testname, yaml_data)
-            else:
-                tap_writer.record_test(True, testname, yaml_data)
+                if failures:
+                    yaml_data["failures"] = failures
+                    tap_writer.record_test(False, testname, yaml_data)
+                else:
+                    tap_writer.record_test(True, testname, yaml_data)
 
         return {"failures": failures, "q": self.q}
 
@@ -1026,13 +1030,20 @@ class DebugHelper():
                 logger.setLevel(logging.DEBUG) #turn on debug verbosity if specified in the yaml file
             if 'gdb' in section['debug'] or 'ddd' in section['debug']:
                 self.rundebug = True
-                debugcmdlist = shlex.split(section['debug'])
-                self.debugger = debugcmdlist.pop(0)
-                self.debugcmd = 'set breakpoint pending on\n' + ' '.join(debugcmdlist)
+                if type(section['debug']) is list:
+                    strlist = copy.deepcopy(section['debug'])
+                    self.debugger = strlist.pop(0)
+                    self.debugcmd = 'set breakpoint pending on\n' + '\n'.join(strlist)
+                else:
+                    debugcmdlist = shlex.split(section['debug'])
+                    self.debugger = debugcmdlist.pop(0)
+                    self.debugcmd = 'set breakpoint pending on\n' + ' '.join(debugcmdlist)
             else:
                 self.rundebug = False
                 if 'break' in section['debug']:
                     pdb.set_trace() #debugger break
+        else:
+            self.rundebug = False
 
     def ModifyCommand(self, command):
         c_array = shlex.split(command)        

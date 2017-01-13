@@ -60,27 +60,30 @@
       command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name=$test_volume description="test volume" blocksize=1024 email=$SYNDICATE_ADMIN
 
     - name: create AG config
-      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_ag type=AG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_ag type=AG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31112
 
     - name: update AG config
       command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_ag caps=ALL port=31112 driver=$ag_driver
+
+    - name: create cat UG config
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$cat_ug type=UG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
+
+    - name: update cat UG config
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$cat_ug caps=ALL
 
 - name: daemon AG
   type: daemon
   tasks:
     - name: start AG
       command: $ag_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_ag
-      sleep: 20
       exit: 0
 
-- name: setup UGs
+- name: check syndicate is mounted
   type: sequential
   tasks:
-    - name: create cat UG config
-      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$cat_ug type=UG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
-
-    - name: update cat UG config
-      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$cat_ug caps=ALL
+    - name: wait for AG to be online
+      command: $tasksf_dir/waitgateway.py localhost 31112 20
+      exit: 0
 
 - name: run ag cat tests
   type: sequential

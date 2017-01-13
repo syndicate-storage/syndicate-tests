@@ -35,7 +35,7 @@
       command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name=$test_volume description="test volume" blocksize=4096 email=$SYNDICATE_ADMIN
 
     - name: create RG
-      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_rg type=RG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_rg type=RG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31112
 
     - name: update RG
       command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_rg caps=ALL port=31112 driver=$rg_driver
@@ -60,8 +60,12 @@
 - name: check syndicate is mounted
   type: sequential
   tasks:
-    - name: wait for syndicatefs to be mounted
-      command: $tasksf_dir/waitfusemount.py syndicatefs $mount_dir 20
+    - name: wait for RG to be online
+      command: $tasksf_dir/waitgateway.py localhost 31112 20
+      exit: 0
+        
+    - name: wait for UG to be online
+      command: $tasksf_dir/waitgateway.py localhost 31111 20
       exit: 0
 
 - name: run truncate tests 09

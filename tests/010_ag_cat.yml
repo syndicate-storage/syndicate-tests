@@ -79,9 +79,10 @@
       exit: 0
 
 - name: check syndicate is mounted
+  comment: AG may require additional time to finish processing the dataset i.e. 5 seconds
   type: sequential
   tasks:
-    - name: wait for AG to be online
+    - name: wait for AG to be online then wait 5 seconds
       command: $tasksf_dir/waitgateway.py localhost 31112 20
       exit: 0
       sleep: 5

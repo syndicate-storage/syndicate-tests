@@ -83,6 +83,7 @@
   tasks:
     - name: wait for AG to be online
       command: $tasksf_dir/waitgateway.py localhost 31112 20
+      sleep: 1
       exit: 0
 
 - name: run ag cat tests

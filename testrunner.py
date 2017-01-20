@@ -134,14 +134,18 @@ def randname(name, size=12, varname=None):
                  (varname, r_name))
 
 
-def randloop(name, quantity, size=12, varname=None):
+def randloop(name, quantity, size=12, copy=None, prepend='', varname=None):
 
     global loop_vars
 
     vararray = []
 
-    for i in xrange(0, quantity):
-        vararray.append("%s-%s" % (name, randstring(size)))
+    if type(copy) is str:
+        for icopy in loop_vars[copy]:
+            vararray.append("%s%s" % (prepend, icopy))
+    else:
+        for i in xrange(0, quantity):
+            vararray.append("%s-%s" % (name, randstring(size)))
 
     if varname is None:
         varname = name
@@ -199,11 +203,16 @@ def replace_vars(string):
     string = re.sub(r"\}\]", "]", string)
 
     # first capture on space/word boundaries with and without dictionary keys
-    rsv = re.compile('\$(\w+\.\w+|\w+)(?:\W|$)*?')
+    rsv = re.compile('[\$|\@](\w+\.\w+|\w+)(?:\W|$)*?')
     rsv_matches = rsv.findall(string)
 
     for match in rsv_matches:
-        if ('%s[' % match) in string: #check for explicit array use
+        if ('@%s' % match) in string: #look for @ syntax, which prints the list as a string
+            rr = re.compile('\@%s' % match)
+            if match in loop_vars and loop_vars[match] is not False:
+                liststr = ' '.join(loop_vars[match])
+                string = rr.sub(' '.join(loop_vars[match]), string, count=1) #access all elements from the loop_vars variable instead of r_vars
+        elif ('%s[' % match) in string: #check for explicit array use
             riv = re.compile('%s\[\$?(\S+)\]' % match)
             idxvar = riv.findall(string)
             if not idxvar:
@@ -343,7 +352,7 @@ class CommandRunner():
             logger.debug("Running Task '%s': `%s` in shell" % (self.task['name'], command))
             run_params['shell'] = True
             if debughelper.show:
-                print ("Execute (sh): <Task> '%s': <Command> `%s`" % (self.task['name'], command))
+                print ("Execute (sh) Task '%s': Command: `%s`" % (self.task['name'], command))
             else:
                 self.p = subprocess.Popen(command, **run_params)
         else:
@@ -351,7 +360,7 @@ class CommandRunner():
             c_array = shlex.split(command)
             logger.debug("Running Task '%s': `%s`" % (self.task['name'], command))
             if debughelper.show:
-                print ("Execute: <Task> '%s': <Command> `%s`" % (self.task['name'], command))
+                print ("Execute Task '%s': Command: `%s`" % (self.task['name'], command))
             else:
                 self.p = subprocess.Popen(c_array, **run_params)
 
@@ -559,7 +568,7 @@ class CommandRunner():
 
             with open(rangecheckout_fname) as fin:
                 fin.seek(offset)
-                data = fin.read(length) #assumes length is how much to read before lengthping
+                data = fin.read(length)
                 debughelper.stdOut("  STDOUT: '%s'" % stdout_str)
                 if stdout_str == data:
                     logger.debug("Task '%s' stdout matches contents within '%s' between %d and %d" %
@@ -571,7 +580,7 @@ class CommandRunner():
                         logger.debug("Task '%s' stdout was: '%s'" %
                                     (self.task['name'], stdout_str))
                         logger.debug("Task '%s' stdout between %d and %d should be: '%s'" %
-                                 (self.task['name'], start, start + stop, data))
+                                 (self.task['name'], offset, offset + length, data))
                     logger.error(rangecheckout_fail)
                     failures.append(rangecheckout_fail)
 
@@ -664,9 +673,10 @@ class RunParallel():
 
         global loop_vars
 
+        self.numtasks = 0
         self.runners = []
         self.run_out = []
-        self.tasks = []
+        self.taskscontainer = [] #contains lists of tasks lists
 
         if 'tasks' not in taskblock:
             logger.error("No tasks in taskblock '%s'" % taskblock['name'])
@@ -676,13 +686,13 @@ class RunParallel():
 
         if 'loop_on' in taskblock:
             if taskblock['loop_on'] in loop_vars:
-                self.tasks = self.loop_tasks(taskblock['loop_on'], taskblock)
+                self.taskscontainer = self.loop_tasks(taskblock['loop_on'], taskblock)
             else:
                 logger.error("loop_on array '%s' is unknown in taskblock '%s'" %
                              (taskblock['loop_on'], taskblock['name']))
                 sys.exit(1)
         else:
-            self.tasks = taskblock['tasks']
+            self.taskscontainer.append(taskblock['tasks'])
 
         self.taskblock_name = taskblock['name']
         self.tap_writer = tap_writer
@@ -692,10 +702,11 @@ class RunParallel():
         global loop_vars
         global r_vars
 
-        tasks = []
+        taskscontainer = []
 
         index = 0
         for loop_var in loop_vars[varname]:
+            tasks = []
             for task in taskblock['tasks']:
                 if type(loop_var) is dict:                            #check if the first element in the loop_var list is a dictionary
                     for key in loop_var.keys():                       #if dict, for each key in the dictionary
@@ -709,6 +720,7 @@ class RunParallel():
                     r_vars['loop_var'] = str(loop_var)                #maintain the original "loop_var" name for backward compatibility, i.e. use "loop_var" instead of the specified loop "varname"
                 
                 if 'loop_on' in task:                                 #the task also has a loop_on option, making nested loops possible
+                    tasks = []
                     nested_varname = task['loop_on']                  #get the varname for the individual task
                     for nested_loop_var in loop_vars[nested_varname]: #this is the nested loop, it operates identical to the outer loop
                         if type(nested_loop_var) is dict:
@@ -736,6 +748,7 @@ class RunParallel():
                             if key in task:
                                 modified_task[key] = "%s-%d" % (task[key], index)
                         tasks.append(modified_task)
+                        self.numtasks+=1
                 else:
                     index+=1
                     r_vars['loop_index'] = str(index)
@@ -753,41 +766,60 @@ class RunParallel():
                             modified_task[key] = "%s-%d" % (task[key], index)
 
                     tasks.append(modified_task)
-
-        return tasks
+                    self.numtasks+=1
+            taskscontainer.append(tasks)
+        return taskscontainer
 
     def num_tests(self):
-        return len(self.tasks)
+        return self.numtasks
 
     def run(self):
-        for task in self.tasks:
-            debughelper.Check(task) #check "debug:" for options, break in py-debugger if "debug: break" is in this taskblock
-            cr = CommandRunner(task, self.taskblock_name)
-            self.runners.append({"name": task['name'], "cr": cr})
-            cr.run()
+        for tasks in self.taskscontainer:
+            for task in tasks:
+                debughelper.Check(task) #check "debug:" for options, break in py-debugger if "debug: break" is in this taskblock
+                cr = CommandRunner(task, self.taskblock_name)
+                self.runners.append({"name": task['name'], "cr": cr})
+                cr.run()
 
         for runner in self.runners:
             self.run_out.append(runner['cr'].finish(self.tap_writer))
+
+    
+class RunBackground(RunParallel): #almost the same as "parallel" except this waits for each task to finish before iterating to the next loop_on
+
+    def run(self):
+        for tasks in self.taskscontainer: #separating tasks this way insures that the nested/inner loop finishes before continuing
+            for task in tasks:
+                debughelper.Check(task) #check "debug:" for options, break in py-debugger if "debug: break" is in this taskblock
+                cr = CommandRunner(task, self.taskblock_name)
+                self.runners.append({"name": task['name'], "cr": cr})
+                cr.run()
+
+            for runner in self.runners:
+                self.run_out.append(runner['cr'].finish(self.tap_writer))
+            self.runners = []
 
 
 class RunSequential(RunParallel):
 
     def run(self):
-        for task in self.tasks:
-            debughelper.Check(task) #check "debug:" for options, break in py-debugger if "debug: break" is in this taskblock
-            cr = CommandRunner(task, self.taskblock_name)
-            cr.run()
-            self.run_out.append(cr.finish(self.tap_writer))
+        for tasks in self.taskscontainer:
+            for task in tasks:
+                debughelper.Check(task) #check "debug:" for options, break in py-debugger if "debug: break" is in this taskblock
+                cr = CommandRunner(task, self.taskblock_name)
+                cr.run()
+                self.run_out.append(cr.finish(self.tap_writer))
 
 
 class RunDaemon(RunParallel):
 
     def run(self):
-        for task in self.tasks:
-            debughelper.Check(task) #check "debug:" for options, break in py-debugger if "debug: break" is in this taskblock
-            cr = CommandRunner(task, self.taskblock_name)
-            self.runners.append({"name": task['name'], "cr": cr})
-            cr.run()
+        for tasks in self.taskscontainer:
+            for task in tasks:
+                debughelper.Check(task) #check "debug:" for options, break in py-debugger if "debug: break" is in this taskblock
+                cr = CommandRunner(task, self.taskblock_name)
+                self.runners.append({"name": task['name'], "cr": cr})
+                cr.run()
 
     def stop(self):
         for runner in self.runners:
@@ -880,7 +912,7 @@ class TaskBlocksRunner():
                                  (req_key, taskb))
                     sys.exit(1)
 
-            if taskb['type'] not in ["setup", "daemon", "sequential", "parallel", ]:
+            if taskb['type'] not in ["setup", "daemon", "sequential", "parallel", "background"]:
                 logger.error("Unknown task type '%s' in task block: %s" %
                              (taskb['type'], taskb))
                 sys.exit(1)
@@ -905,6 +937,13 @@ class TaskBlocksRunner():
 
             elif taskb['type'] == "parallel":
                 par_runner = RunParallel(taskb, tap_writer)
+                num_tests += par_runner.num_tests()
+                self.runners.append(
+                    {"name": taskb['name'], "runner": par_runner,
+                     "type": taskb['type']})
+            
+            elif taskb['type'] == "background":
+                par_runner = RunBackground(taskb, tap_writer)
                 num_tests += par_runner.num_tests()
                 self.runners.append(
                     {"name": taskb['name'], "runner": par_runner,
@@ -939,7 +978,10 @@ class TaskBlocksRunner():
 
         if 'randloop' in setupb:
             for rloop in setupb['randloop']:
-                randloop(rloop['name'], rloop['quantity'])
+                if 'copy' in rloop and 'prepend' in rloop:
+                    randloop(rloop['name'], 0, 12, rloop['copy'], rloop['prepend'], rloop['name'])
+                else:
+                    randloop(rloop['name'], rloop['quantity'])
 
         if 'seqloop' in setupb:
             for sloop in setupb['seqloop']:
@@ -1019,6 +1061,8 @@ class DebugHelper():
     
     def Check(self, section):
         if 'debug' in section and section['debug'] is not False:
+            if 'COMMENT' in section['debug'] or 'comment' in section['debug']:
+                logger.debug("%s" % (section['debug']))
             if 'show' in section['debug']:
                 self.show = True
             if 'stdout' in section['debug']:
@@ -1044,6 +1088,8 @@ class DebugHelper():
                     pdb.set_trace() #debugger break
         else:
             self.rundebug = False
+        if 'comment' in section:
+            logger.debug("*** %s ***" % section['comment'])
 
     def ModifyCommand(self, command):
         c_array = shlex.split(command)        

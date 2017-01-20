@@ -76,12 +76,14 @@
   tasks:
     - name: start AG
       command: $ag_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_ag
+      exit: 0
 
 - name: check syndicate is mounted
   type: sequential
   tasks:
     - name: wait for AG to be online
       command: $tasksf_dir/waitgateway.py localhost 31112 20
+      exit: 0
       sleep: 5
 
 - name: run ag cat tests

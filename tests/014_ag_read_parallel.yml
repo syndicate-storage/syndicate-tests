@@ -68,7 +68,7 @@
       value: $SYNDICATE_AG_ROOT/syndicate-ag
     - name: read_path
       value: $SYNDICATE_UG_ROOT/syndicate-read
-  debug: verbose
+  debug: off
 
 - name: create ag dataset
   type: sequential

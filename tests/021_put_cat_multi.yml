@@ -12,7 +12,7 @@
     - cat_ug
   randloop:
     - name: test_cattimes
-      quantity: 1
+      quantity: 10
   vars:
     - name: local_file1
       value: $config_dir/local_file1

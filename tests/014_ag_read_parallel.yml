@@ -1,6 +1,8 @@
 ---
-# Acquisition Gateway read test
-# Description: Create an AG that initializes with 3 files as it's data set, create a UG to read the data, and confirm accuracy
+# Acquisition Gateway read parallel test
+# Description: Create an AG and 8 parallel UGs, read a file at various positions on each thread in parallel, read again utilizing cache
+# This test may fail with the following error, it seems to correlate to the number of parallel threads:
+# *** Error in `/usr/bin/syndicate-ag': double free or corruption (fasttop): 0x00007f632400c170 ***
 
 - name: setup_ag_read_parallel
   type: setup
@@ -13,9 +15,7 @@
     - read_ug
   seqloop:              # list from of ints from 0
     - name: threadnum
-      quantity: 1
-    - name: cacheloop
-      quantity: 2
+      quantity: 8
   valueloop:            # list/dict with the name(s) and value(s) defined below
     - name: threadport
       values:
@@ -29,34 +29,34 @@
         - 31119
     - name: test_ranges
       values:
-#        - offset: 0
-#          length: 16384
+        - offset: 0
+          length: 16384
         - offset: 1
           length: 199     # 1 to 200
-#        - offset: 0
-#          length: 4096    # 1 block, aligned
-#        - offset: 0
-#          length: 8192    # 2 blocks, aligned
-#        - offset: 0
-#          length: 1000    # 1 block, tail unaligned
-#        - offset: 0
-#          length: 6000    # 2 blocks, tail unaligned
-#        - offset: 100
-#          length: 3900    # 4000 - 100,   1 block, head unaligned
-#        - offset: 5000
-#          length: 5000    # 10000 - 5000, 2 blocks, head and tail unaligned
-#        - offset: 4096
-#          length: 5904    # 10000 - 4096, 2 blocks, tail unaligned
-#        - offset: 5000
-#          length: 3192    # 8192 - 5000,  2 blocks, head unalighed
-#        - offset: 4096
-#          length: 12738   # 16834 - 4096, 3 blocks, aligned
-#        - offset: 5000
-#          length: 11384   # 16384 - 5000, 3 blocks, head unaligned
-#        - offset: 4096
-#          length: 11904   # 16000 - 4096, 3 blocks, tail unaligned
-#        - offset: 5000
-#          length: 11000   # 16000 - 5000, 3 blocks, head and tail unaligned
+        - offset: 0
+          length: 4096    # 1 block, aligned
+        - offset: 0
+          length: 8192    # 2 blocks, aligned
+        - offset: 0
+          length: 1000    # 1 block, tail unaligned
+        - offset: 0
+          length: 6000    # 2 blocks, tail unaligned
+        - offset: 100
+          length: 3900    # 4000 - 100,   1 block, head unaligned
+        - offset: 5000
+          length: 5000    # 10000 - 5000, 2 blocks, head and tail unaligned
+        - offset: 4096
+          length: 5904    # 10000 - 4096, 2 blocks, tail unaligned
+        - offset: 5000
+          length: 3192    # 8192 - 5000,  2 blocks, head unalighed
+        - offset: 4096
+          length: 12738   # 16834 - 4096, 3 blocks, aligned
+        - offset: 5000
+          length: 11384   # 16384 - 5000, 3 blocks, head unaligned
+        - offset: 4096
+          length: 11904   # 16000 - 4096, 3 blocks, tail unaligned
+        - offset: 5000
+          length: 11000   # 16000 - 5000, 3 blocks, head and tail unaligned
   vars:
     - name: local_file
       value: /tmp/syndicate-AG-dataset/local_file
@@ -68,7 +68,7 @@
       value: $SYNDICATE_AG_ROOT/syndicate-ag
     - name: read_path
       value: $SYNDICATE_UG_ROOT/syndicate-read
-  debug: disable verbose stdout stderr
+  debug: verbose
 
 - name: create ag dataset
   type: sequential
@@ -89,12 +89,13 @@
       command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name=$test_volume description="test volume" blocksize=1024 email=$SYNDICATE_ADMIN
 
     - name: create AG config
-      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_ag type=AG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31112
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_ag type=AG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31111
 
     - name: update AG config
-      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_ag caps=ALL port=31112 driver=$ag_driver
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_ag caps=ALL port=31111 driver=$ag_driver
 
 - name: daemon AG
+  comment: "This test may fail with a double free or corruption error in syndicate-ag, reducing threads may help"
   type: daemon
   tasks:
     - name: start AG
@@ -105,7 +106,7 @@
   type: sequential
   tasks:
     - name: wait for AG to be online
-      command: $tasksf_dir/waitgateway.py localhost 31112 20
+      command: $tasksf_dir/waitgateway.py localhost 31111 20
       exit: 0
 
 - name: setup UGs
@@ -116,13 +117,28 @@
       command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$read_ug-$threadnum type=UG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=$threadport[$threadnum]
 
     - name: update read UG config
-      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$read_ug-$threadnum caps=ALL
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway $read_ug-$threadnum caps=ALL
+
+    - name: read gateway config
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" read_gateway $read_ug-$threadnum
+
+    - name: update read UG config
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" read_volume $test_volume
 
 - name: execute parallel read UG for threads
-  type: daemon
-  loop_on: threadnum
+  type: background
+  loop_on: test_ranges
   tasks:
     - name: parallel read
-      loop_on: test_ranges
+      loop_on: threadnum
+      command: $read_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $read_ug-$threadnum /local_file $test_ranges.offset $test_ranges.length
+      rangecheckout: $local_file $test_ranges.offset $test_ranges.length
+
+- name: execute parallel read UG for threads cached
+  type: background
+  loop_on: test_ranges
+  tasks:
+    - name: parallel read cache
+      loop_on: threadnum
       command: $read_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $read_ug-$threadnum /local_file $test_ranges.offset $test_ranges.length
       rangecheckout: $local_file $test_ranges.offset $test_ranges.length

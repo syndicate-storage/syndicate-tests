@@ -222,11 +222,18 @@ def replace_vars(string):
                 idx = int(idxvar[0])
             else:                     #an index variable was used, i.e. $a[$i]
                 idx = int(r_vars[idxvar[0]]) 
-            rr = re.compile('\$\{?%s\[\$?\S+\]\}?' % match)              #capture the array string refernce
-            string = rr.sub(str(loop_vars[match][idx]), string, count=1) #and replace with the array's value
+            if type(loop_vars[match][idx]) is dict:
+                rrm = re.compile('%s\[\$?\S+\]\}?\.(\w+)' % match)           #capture the dict dot string reference
+                rr_match = rrm.findall(string)
+                rr = re.compile('\$\{?%s\[\$?\S+\]\}?\.\w+' % match)         #capture the array string reference
+                string = rr.sub(str(loop_vars[match][idx][rr_match[0]]), string, count=1) #and replace with the dict value
+            else:
+                rr = re.compile('\$\{?%s\[\$?\S+\]\}?' % match)              #capture the array string refernce
+                string = rr.sub(str(loop_vars[match][idx]), string, count=1) #and replace with the array's value
         elif match in r_vars: #see if captured matches are defined as a replacement variable
-            rr = re.compile('\$%s' % match)
-            string = rr.sub(r_vars[match], string, count=1)
+            if match in string:
+                rr = re.compile('\$%s' % match)
+                string = rr.sub(r_vars[match], string, count=1)
         else:
             logger.error("Unknown variable: '$%s' in '%s'" %
                          (match, string))
@@ -246,11 +253,18 @@ def replace_vars(string):
                 idx = int(idxvar[0])
             else:                     #an index variable was used, i.e. ${a[$i]}
                 idx = int(r_vars[idxvar[0]]) 
-            rr = re.compile('\$\{?%s\[\$?\S+\]\}?' % match)              #capture the array string refernce
-            string = rr.sub(str(loop_vars[match][idx]), string, count=1) #and replace with the array's value
+            if type(loop_vars[match][idx]) is dict:
+                rrm = re.compile('%s\[\$?\S+\]\}?\.(\w+)' % match)           #capture the dict dot string reference
+                rr_match = rrm.findall(string)
+                rr = re.compile('\$\{?%s\[\$?\S+\]\}?\.\w+' % match)         #capture the array string reference
+                string = rr.sub(str(loop_vars[match][idx][rr_match[0]]), string, count=1) #and replace with the array's value
+            else:
+                rr = re.compile('\$\{?%s\[\$?\S+\]\}?' % match)              #capture the array string refernce
+                string = rr.sub(str(loop_vars[match][idx]), string, count=1) #and replace with the array's value
         elif match in r_vars:
-            rr = re.compile('\$\{%s\}' % match)
-            string = rr.sub(r_vars[match], string, count=1)
+            if match in string:
+                rr = re.compile('\$\{%s\}' % match)
+                string = rr.sub(r_vars[match], string, count=1)
         else:
             logger.error("Unknown variable: '$%s' in '%s'" %
                          (match, string))

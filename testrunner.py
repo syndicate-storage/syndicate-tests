@@ -734,18 +734,20 @@ class RunParallel():
                     r_vars['loop_var'] = str(loop_var)                #maintain the original "loop_var" name for backward compatibility, i.e. use "loop_var" instead of the specified loop "varname"
                 
                 if 'loop_on' in task:                                 #the task also has a loop_on option, making nested loops possible
+                    outerindex = index
+                    index = 0
                     tasks = []
                     nested_varname = task['loop_on']                  #get the varname for the individual task
                     for nested_loop_var in loop_vars[nested_varname]: #this is the nested loop, it operates identical to the outer loop
                         if type(nested_loop_var) is dict:
                             for key in nested_loop_var.keys():
-                                varkeystr = "%s.%s" % (nested_varname,key)
-                                r_vars[varkeystr] = str(nested_loop_var[key])
-                                varkeystr = "nested_loop_var.%s" % (key) #instead of "loop_var.key" use "nested_loop_var.key"
-                                r_vars[varkeystr] = str(nested_loop_var[key])
+                                nvarkeystr = "%s.%s" % (nested_varname,key)
+                                r_vars[nvarkeystr] = str(nested_loop_var[key])
+                                nvarkeystr = "nested_loop_var.%s" % (key) #instead of "loop_var.key" use "nested_loop_var.key"
+                                r_vars[nvarkeystr] = str(nested_loop_var[key])
                         else:
-                            varkeystr = str(nested_varname)
-                            r_vars[varkeystr] = str(nested_loop_var)
+                            nvarkeystr = str(nested_varname)
+                            r_vars[nvarkeystr] = str(nested_loop_var)
                             r_vars['nested_loop_var'] = str(nested_loop_var) #instead of "loop_var" use "nested_loop_var"
                         index+=1 
                         r_vars['loop_index'] = str(index)
@@ -763,6 +765,8 @@ class RunParallel():
                                 modified_task[key] = "%s-%d" % (task[key], index)
                         tasks.append(modified_task)
                         self.numtasks+=1
+                    index = outerindex
+                    r_vars[nvarkeystr] = loop_vars[nested_varname][0]     #be sure to reset variables after the loop
                 else:
                     index+=1
                     r_vars['loop_index'] = str(index)
@@ -782,6 +786,8 @@ class RunParallel():
                     tasks.append(modified_task)
                     self.numtasks+=1
             taskscontainer.append(tasks)
+        r_vars['loop_index'] = str(index)
+        r_vars[varkeystr] = loop_vars[varname][0]
         return taskscontainer
 
     def num_tests(self):

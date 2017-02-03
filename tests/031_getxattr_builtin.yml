@@ -1,0 +1,107 @@
+---
+
+- name: setup_getxattr_builtin
+  type: setup
+  tmpdirs:
+    - name: 031_getxattr_builtin
+      varname: config_dir
+  randnames:
+    - test_volume
+    - test_rg
+    - attr_ug
+  valueloop:            # list/dict with the name(s) and value(s) defined below
+    - name: builtin_xattrs
+      values:
+        - name: user.syndicate_coordinator
+          value: $attr_ug
+        - name: user.syndicate_cached_blocks
+          value: "0000"
+        - name: user.syndicate_cached_file_path
+          value: "!None"
+        - name: user.syndicate_read_ttl
+          value: 5000
+        - name: user.syndicate_write_ttl
+          value: 0
+  vars:
+    - name: local_file
+      value: $config_dir/local_file
+    - name: syndicate_conf
+      value: $config_dir/syndicate.conf
+    - name: rg_driver
+      value: $SYNDICATE_PYTHON_ROOT/syndicate/rg/drivers/disk
+    - name: rg_path
+      value: $SYNDICATE_RG_ROOT/syndicate-rg
+    - name: put_path
+      value: $SYNDICATE_UG_ROOT/syndicate-put
+    - name: cat_path
+      value: $SYNDICATE_UG_ROOT/syndicate-cat
+    - name: getxattr_path
+      value: $SYNDICATE_UG_ROOT/syndicate-getxattr
+    - name: stat_path
+      value: $SYNDICATE_UG_ROOT/syndicate-stat
+  debug: off
+
+- name: config
+  type: sequential
+  tasks:
+    - name: make local_file
+      command: $tasksf_dir/mkpatternfile.py $local_file 16384 abcdef
+
+    - name: setup
+      command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS"
+
+    - name: add test volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name=$test_volume description="test volume" blocksize=4096 email=$SYNDICATE_ADMIN
+
+    - name: create RG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_rg type=RG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31112
+
+    - name: update RG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_rg caps=ALL port=31112 driver=$rg_driver
+
+- name: daemon RG
+  type: daemon
+  tasks:
+    - name: start RG
+      command: $rg_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_rg
+      exit: 0
+
+- name: check syndicate is mounted
+  type: sequential
+  tasks:
+    - name: wait for RG to be online
+      command: $tasksf_dir/waitgateway.py localhost 31112 20
+      exit: 0
+
+- name: setup UGs
+  type: sequential
+  tasks:
+    - name: create attr UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$attr_ug type=UG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31113
+
+    - name: update attr UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$attr_ug caps=ALL
+
+- name: run put and stat test
+  type: sequential
+  tasks:
+    - name: test put
+      command: $put_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $attr_ug $local_file /put-getxattr
+
+    - name: test stat
+      command: $stat_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $attr_ug /put-getxattr
+      saveout: $config_dir/putfile-stat
+
+- name: run getxattr tests
+  type: sequential
+  loop_on: builtin_xattrs
+  tasks:
+    - name: getxattr
+      command: $getxattr_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $attr_ug /put-getxattr $builtin_xattrs.name
+      compareout: "$builtin_xattrs.value"
+
+- name: run cat test
+  type: sequential
+  tasks:
+    - name: test cat
+      command: $cat_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $attr_ug /put-getxattr

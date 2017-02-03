@@ -1,0 +1,66 @@
+#setxattr_getxattr runs setxattr with 1 name/value pair and runs getxattr.  The getxattr returns and error due to a hash mismatch.  This error also exists in the legacy tests
+---
+
+- name: setup_setxattr_getxattr
+  type: setup
+  tmpdirs:
+    - name: 032_setxattr_getxattr
+      varname: config_dir
+  randnames:
+    - test_volume
+    - attr_ug
+    - attr_file
+    - attrn
+  vars:
+    - name: syndicate_conf
+      value: $config_dir/syndicate.conf
+    - name: put_path
+      value: $SYNDICATE_UG_ROOT/syndicate-put
+    - name: cat_path
+      value: $SYNDICATE_UG_ROOT/syndicate-cat
+    - name: getxattr_path
+      value: $SYNDICATE_UG_ROOT/syndicate-getxattr
+    - name: setxattr_path
+      value: $SYNDICATE_UG_ROOT/syndicate-setxattr
+    - name: stat_path
+      value: $SYNDICATE_UG_ROOT/syndicate-stat
+    - name: touch_path
+      value: $SYNDICATE_UG_ROOT/syndicate-touch
+  debug: verbose stderr
+
+- name: config
+  type: sequential
+  tasks:
+    - name: setup
+      command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS"
+
+    - name: add test volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name=$test_volume description="test volume" blocksize=4096 email=$SYNDICATE_ADMIN
+
+- name: setup UGs
+  type: sequential
+  tasks:
+    - name: create attr UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$attr_ug type=UG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31113
+
+    - name: update attr UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$attr_ug caps=ALL
+
+- name: test touch file
+  type: sequential
+  tasks:
+    - name: touch file
+      command: $touch_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $attr_ug /$attr_file
+
+- name: run setxattr tests
+  type: sequential
+  tasks:
+    - name: setxattr
+      command: $setxattr_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $attr_ug /$attr_file ${attrn}-name ${attrn}-value
+
+- name: run getxattr tests
+  type: sequential
+  tasks:
+    - name: getxattr
+      command: $getxattr_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $attr_ug /$attr_file ${attrn}-name
+      containserr: ${attrn}-value

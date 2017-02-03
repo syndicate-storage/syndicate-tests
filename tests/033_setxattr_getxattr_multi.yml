@@ -1,0 +1,69 @@
+#setxattr_getxattr_multi runs setxattr with 5 name/value pairs and runs getxattr with 5 names.  The getxattr returns and error due to a hash mismatch
+---
+
+- name: setup_setxattr_getxattr_multi
+  type: setup
+  tmpdirs:
+    - name: 033_setxattr_getxattr_multi
+      varname: config_dir
+  randloop:
+    - name: attrn
+      quantity: 5
+  randnames:
+    - test_volume
+    - attr_ug
+    - attr_file
+  vars:
+    - name: syndicate_conf
+      value: $config_dir/syndicate.conf
+    - name: getxattr_path
+      value: $SYNDICATE_UG_ROOT/syndicate-getxattr
+    - name: setxattr_path
+      value: $SYNDICATE_UG_ROOT/syndicate-setxattr
+    - name: stat_path
+      value: $SYNDICATE_UG_ROOT/syndicate-stat
+    - name: touch_path
+      value: $SYNDICATE_UG_ROOT/syndicate-touch
+  debug: verbose stderr
+
+- name: config
+  type: sequential
+  tasks:
+    - name: setup
+      command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS"
+
+    - name: add test volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name=$test_volume description="test volume" blocksize=4096 email=$SYNDICATE_ADMIN
+
+- name: setup UGs
+  type: sequential
+  tasks:
+    - name: create attr UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$attr_ug type=UG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31113
+
+    - name: update attr UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$attr_ug caps=ALL
+
+- name: test touch file
+  type: sequential
+  tasks:
+    - name: touch file
+      command: $touch_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $attr_ug /$attr_file
+
+- name: run setxattr tests
+  type: sequential
+  tasks:
+    - name: setxattr
+      command: $setxattr_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $attr_ug /$attr_file ${attrn[0]}-name ${attrn[0]}-value ${attrn[1]}-name ${attrn[1]}-value ${attrn[2]}-name ${attrn[2]}-value ${attrn[3]}-name ${attrn[3]}-value ${attrn[4]}-name ${attrn[4]}-value
+
+- name: run getxattr tests
+  type: sequential
+  tasks:
+    - name: getxattr
+      command: $getxattr_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $attr_ug /$attr_file ${attrn[0]}-name ${attrn[1]}-name ${attrn[2]}-name ${attrn[3]}-name ${attrn[4]}-name
+      containserr: 
+        - ${attrn[0]}-value 
+        - ${attrn[1]}-value
+        - ${attrn[2]}-value
+        - ${attrn[3]}-value
+        - ${attrn[4]}-value

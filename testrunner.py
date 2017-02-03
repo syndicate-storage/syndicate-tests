@@ -601,27 +601,45 @@ class CommandRunner():
         # check out/err against strings, after rstrip of output
         if 'compareout' in self.task:
             cout_rv = replace_vars(str(self.task['compareout']))
+            expectthis = True
+            if cout_rv[0] == '!': #if str starts with '!', fails if str == stdout
+                cout_rv = cout_rv[1:] #remove the '!', then compare
+                expectthis = False
             if cout_rv == stdout_str.rstrip():
-                logger.debug("Task '%s' stdout matches string of '%s'" %
-                             (self.task['name'], cout_rv))
-
+                cout_log = ("Task '%s' stdout matches string of '%s'" % (self.task['name'], cout_rv))
+                if expectthis:
+                    logger.debug(cout_log)
+                else: #error 
+                    logger.error(cout_log)
+                    failures.append(cout_log)
             else:
-                cout_fail = ("Task '%s' stdout '%s' does not match string '%s'" %
-                             (self.task['name'], stdout_str.rstrip(), cout_rv))
-                logger.error(cout_fail)
-                failures.append(cout_fail)
+                cout_log = ("Task '%s' stdout '%s' does not match string '%s'" % (self.task['name'], stdout_str.rstrip(), cout_rv))
+                if not expectthis:
+                    logger.debug(cout_log)
+                else: #error 
+                    logger.error(cout_log)
+                    failures.append(cout_log)
 
         if 'compareerr' in self.task:
             cerr_rv = replace_vars(str(self.task['compareerr']))
+            expectthis = True
+            if cerr_rv[0] == '!': #if str starts with '!', fails if str == stderr
+                cerr_rv = cerr_rv[1:] #remove the '!', then compare
+                expectthis = False
             if cerr_rv == stderr_str.rstrip():
-                logger.debug("Task '%s' stderr matches string of '%s'" %
-                             (self.task['name'], cerr_rv))
-
+                cerr_log = ("Task '%s' stderr matches string of '%s'" % (self.task['name'], cerr_rv))
+                if expectthis:
+                    logger.debug(cerr_log)
+                else: #error 
+                    logger.error(cerr_log)
+                    failures.append(cerr_log)
             else:
-                cerr_fail = ("Task '%s' stderr '%s' does not match string '%s'" %
-                             (self.task['name'], stderr_str.rstrip(), cerr_rv))
-                logger.error(cerr_fail)
-                failures.append(cerr_fail)
+                cerr_log = ("Task '%s' stderr '%s' does not match string '%s'" % (self.task['name'], stderr_str.rstrip(), cerr_rv))
+                if not expectthis:
+                    logger.debug(cerr_log)
+                else: #error 
+                    logger.error(cerr_log)
+                    failures.append(cerr_log)
         
         if 'containsout' in self.task:
             strlist = []
@@ -632,17 +650,26 @@ class CommandRunner():
 
             for pattern in strlist:
                 rpattern = replace_vars(str(pattern))
+                expectthis = True
+                if rpattern[0] == '!': #if str starts with '!', fails if str in stdout
+                    rpattern = rpattern[1:] #remove the '!', then compare
+                    expectthis = False
                 if rpattern in stdout_str.rstrip():
-                    logger.debug("Task '%s' stdout contains string of '%s'" %
-                                 (self.task['name'], rpattern))
+                    cout_log = ("Task '%s' stdout contains string of '%s'" % (self.task['name'], rpattern))
+                    if expectthis:
+                        logger.debug(cout_log)
+                    else: #error 
+                        logger.error(cout_log)
+                        failures.append(cout_log)
                 else:
-                    containsout_fail = ("Task '%s' stdout does not contain string of '%s'" %
-                                     (self.task['name'], rpattern))
-                    logger.error(containsout_fail)
-                    failures.append(containsout_fail)
+                    cout_log = ("Task '%s' stdout does not contain string of '%s'" % (self.task['name'], rpattern))
+                    if not expectthis:
+                        logger.debug(cout_log)
+                    else: #error 
+                        logger.error(cout_log)
+                        failures.append(cout_log)
             if debughelper.verbose: 
-                logger.debug("Task '%s' stdout was: '%s'" %
-                            (self.task['name'], stdout_str))
+                logger.debug("Task '%s' stdout was: '%s'" % (self.task['name'], stdout_str))
         
         if 'containserr' in self.task:
             strlist = []
@@ -653,14 +680,23 @@ class CommandRunner():
 
             for pattern in strlist:
                 rpattern = replace_vars(str(pattern))
+                if rpattern[0] == '!': #if str starts with '!', fails if str in stderr
+                    rpattern = rpattern[1:] #remove the '!', then compare
+                    expectthis = False
                 if rpattern in stderr_str.rstrip():
-                    logger.debug("Task '%s' stderr contains string of '%s'" %
-                                 (self.task['name'], pattern))
+                    cout_log = ("Task '%s' stderr contains string of '%s'" % (self.task['name'], rpattern))
+                    if expectthis:
+                        logger.debug(cout_log)
+                    else: #error 
+                        logger.error(cout_log)
+                        failures.append(cout_log)
                 else:
-                    containserr_fail = ("Task '%s' stderr does not contain string of '%s'" %
-                                     (self.task['name'], pattern))
-                    logger.error(containserr_fail)
-                    failures.append(containserr_fail)
+                    cout_log = ("Task '%s' stderr does not contain string of '%s'" % (self.task['name'], rpattern))
+                    if not expectthis:
+                        logger.debug(cout_log)
+                    else: #error 
+                        logger.error(cout_log)
+                        failures.append(cout_log)
             if debughelper.verbose: 
                 logger.debug("Task '%s' stderr was: '%s'" %
                             (self.task['name'], stderr_str))

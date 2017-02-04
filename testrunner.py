@@ -680,6 +680,7 @@ class CommandRunner():
 
             for pattern in strlist:
                 rpattern = replace_vars(str(pattern))
+                expectthis = True
                 if rpattern[0] == '!': #if str starts with '!', fails if str in stderr
                     rpattern = rpattern[1:] #remove the '!', then compare
                     expectthis = False

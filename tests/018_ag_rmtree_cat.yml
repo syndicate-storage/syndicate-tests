@@ -39,7 +39,7 @@
       command: mkdir -p /tmp/syndicate-AG-dataset/to_remove1/to_remove2/to_remove3
 
     - name: make random file in the AG dataset path
-      command: $tasksf_dir/mkrandfile.py /tmp/syndicate-AG-dataset/to_remove1/to_remove2/to_remove3/local_file1 16384
+      command: $tasksf_dir/mkfile.py random /tmp/syndicate-AG-dataset/to_remove1/to_remove2/to_remove3/local_file1 16384
 
 - name: config
   type: sequential

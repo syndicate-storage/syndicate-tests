@@ -48,7 +48,7 @@
   loop_on: randfile
   tasks:
     - name: make random files in the AG dataset path
-      command: $tasksf_dir/mkrandfile.py $randfile.value 16384
+      command: $tasksf_dir/mkfile.py random $randfile.value 16384
 
 - name: config
   type: sequential

@@ -50,7 +50,7 @@
       command: mkdir -p /tmp/syndicate-AG-dataset/dir1/dir2
     
     - name: make random file in the AG dataset path
-      command: $tasksf_dir/mkrandfile.py /tmp/syndicate-AG-dataset/dir1/dir2/local_file 16384
+      command: $tasksf_dir/mkfile.py random /tmp/syndicate-AG-dataset/dir1/dir2/local_file 16384
 
 - name: config
   type: sequential

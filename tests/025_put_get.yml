@@ -88,7 +88,7 @@
   loop_on: test_fsizes
   tasks:
     - name: make local_file
-      command: $tasksf_dir/mkrandfile.py ${local_file}_${loop_var} $loop_var
+      command: $tasksf_dir/mkfile.py random ${local_file}_${loop_var} $loop_var
 
     - name: test put
       command: $put_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $put_ug ${local_file}_${loop_var} /$loop_var

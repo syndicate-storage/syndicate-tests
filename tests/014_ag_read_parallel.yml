@@ -80,7 +80,7 @@
   type: sequential
   tasks:
     - name: make random local_file
-      command: $tasksf_dir/mkrandfile.py $local_file 16384
+      command: $tasksf_dir/mkfile.py random $local_file 16384
 
     - name: setup security config
       command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS"

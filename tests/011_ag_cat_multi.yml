@@ -46,7 +46,7 @@
   loop_on: randfile
   tasks:
     - name: make local_file
-      command: $tasksf_dir/mkrandfile.py $randfile.value 16384
+      command: $tasksf_dir/mkfile.py random $randfile.value 16384
 
 - name: config
   type: sequential

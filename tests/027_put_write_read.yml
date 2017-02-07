@@ -78,14 +78,14 @@
   type: sequential
   tasks:
     - name: make random file
-      command: $tasksf_dir/mkrandfile.py /tmp/t028/local-putfile 16834
+      command: $tasksf_dir/mkfile.py random /tmp/t028/local-putfile 16834
 
 - name: create local files
   type: sequential
   loop_on: filenum
   tasks:
     - name: make random files in the AG dataset path
-      command: $tasksf_dir/mkrandfile.py /tmp/t028/infiles/$test_filenames[$filenum] $test_ranges[$filenum].length
+      command: $tasksf_dir/mkfile.py random /tmp/t028/infiles/$test_filenames[$filenum] $test_ranges[$filenum].length
 
 - name: setup RG
   type: sequential

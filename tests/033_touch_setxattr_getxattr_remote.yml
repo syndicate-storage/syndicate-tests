@@ -1,23 +1,28 @@
 #setxattr_getxattr runs setxattr with 1 name/value pair and runs getxattr.  The getxattr returns and error due to a hash mismatch.  This error also exists in the legacy tests
 ---
 
-- name: setup_setxattr_getxattr
+- name: setup_setxattr_getxattr_remote
   type: setup
   tmpdirs:
-    - name: 032_setxattr_getxattr
+    - name: 034_setxattr_getxattr_remote
       varname: config_dir
   randnames:
     - test_volume
+    - test_coord
     - attr_ug
+    - coord_ug
     - attr_file
     - attrn
+    - test_rg
   vars:
     - name: syndicate_conf
       value: $config_dir/syndicate.conf
-    - name: put_path
-      value: $SYNDICATE_UG_ROOT/syndicate-put
-    - name: cat_path
-      value: $SYNDICATE_UG_ROOT/syndicate-cat
+    - name: rg_driver
+      value: $SYNDICATE_PYTHON_ROOT/syndicate/rg/drivers/disk
+    - name: rg_path
+      value: $SYNDICATE_RG_ROOT/syndicate-rg
+    - name: coord_path
+      value: $SYNDICATE_RG_ROOT/syndicate-coord
     - name: getxattr_path
       value: $SYNDICATE_UG_ROOT/syndicate-getxattr
     - name: setxattr_path
@@ -37,6 +42,26 @@
     - name: add test volume
       command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name=$test_volume description="test volume" blocksize=4096 email=$SYNDICATE_ADMIN
 
+    - name: create RG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_rg type=RG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31112
+
+    - name: update RG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_rg caps=ALL port=31112 driver=$rg_driver
+
+- name: daemon RG
+  type: daemon
+  tasks:
+    - name: start RG
+      command: $rg_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_rg
+      exit: 0
+
+- name: check syndicate is mounted
+  type: sequential
+  tasks:
+    - name: wait for RG to be online
+      command: $tasksf_dir/waitgateway.py localhost 31112 20
+      exit: 0
+
 - name: setup UGs
   type: sequential
   tasks:
@@ -45,6 +70,20 @@
 
     - name: update attr UG
       command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$attr_ug caps=ALL
+    
+    - name: create coord UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$coord_ug type=UG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31114
+
+    - name: update coord UG
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$coord_ug caps=AL
+
+- name: daemon coord
+  type: daemon
+  tasks:
+    - name: start coord
+      command: $coord_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $attr_ug
+      sleep: 2
+      exit: 0
 
 - name: test touch file
   type: sequential
@@ -62,5 +101,5 @@
   type: sequential
   tasks:
     - name: getxattr
-      command: $getxattr_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $attr_ug /$attr_file ${attrn}-name
+      command: $getxattr_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $coord_ug /$attr_file ${attrn}-name
       containserr: ${attrn}-value

@@ -1,10 +1,10 @@
 #setxattr_listxattr_multi runs setxattr with 5 name/value pairs and runs listxattr with 5 names.  The listxattr returns and error due to a hash mismatch
 ---
 
-- name: setup_setxattr_listxattr_multi
+- name: setup_touch_setxattr_listxattr_multi
   type: setup
   tmpdirs:
-    - name: 036_setxattr_listxattr_multi
+    - name: 035_touch_setxattr_listxattr_multi
       varname: config_dir
   randloop:
     - name: attrn

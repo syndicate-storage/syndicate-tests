@@ -1,10 +1,10 @@
 #setxattr_getxattr_multi runs setxattr with 5 name/value pairs and runs getxattr with 5 names.  The getxattr returns and error due to a hash mismatch
 ---
 
-- name: setup_setxattr_getxattr_multi
+- name: setup_touch_setxattr_getxattr_multi
   type: setup
   tmpdirs:
-    - name: 033_setxattr_getxattr_multi
+    - name: 032_touch_setxattr_getxattr_multi
       varname: config_dir
   randloop:
     - name: attrn

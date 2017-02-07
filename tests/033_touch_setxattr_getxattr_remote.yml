@@ -4,7 +4,7 @@
 - name: setup_setxattr_getxattr_remote
   type: setup
   tmpdirs:
-    - name: 034_setxattr_getxattr_remote
+    - name: 033_touch_setxattr_getxattr_remote
       varname: config_dir
   randnames:
     - test_volume

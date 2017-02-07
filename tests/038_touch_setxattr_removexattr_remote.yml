@@ -1,10 +1,10 @@
 #setxattr_removexattr runs setxattr with 1 name/value pair and runs removexattr.  The removexattr returns and error due to a hash mismatch.  This error also exists in the legacy tests
 ---
 
-- name: setup_setxattr_removexattr_remote
+- name: setup_touch_setxattr_removexattr_remote
   type: setup
   tmpdirs:
-    - name: 039_setxattr_removexattr_remote
+    - name: 038_touch_setxattr_removexattr_remote
       varname: config_dir
   randnames:
     - test_volume

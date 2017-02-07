@@ -1,9 +1,9 @@
 ---
 
-- name: setup_put_getxattr
+- name: setup_put_stat
   type: setup
   tmpdirs:
-    - name: 027_put_stat
+    - name: 026_put_stat
       varname: config_dir
   randnames:
     - test_volume

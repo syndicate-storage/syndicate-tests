@@ -6,7 +6,7 @@
 - name: setup put_write_read_files
   type: setup
   tmpdirs:
-    - name: 028_put_write_read_files
+    - name: 027_put_write_read_files
       varname: config_dir
   randnames:
     - test_volume

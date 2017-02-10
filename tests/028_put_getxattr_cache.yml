@@ -27,6 +27,8 @@
       value: $SYNDICATE_UG_ROOT/syndicate-getxattr
     - name: cached_blocks
       value: '1111'
+    - name: unlink_path
+      value: $SYNDICATE_UG_ROOT/syndicate-unlink
   debug: off
 
 - name: config
@@ -88,3 +90,12 @@
     - name: getxattr
       command: $getxattr_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $cat_ug /put-getxattr user.syndicate_cached_blocks
       compareout: $cached_blocks
+
+- name: clean up
+  type: sequential
+  tasks:
+    - name: unlink files
+      command: $unlink_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $put_ug /put-getxattr
+
+    - name: delete volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" delete_volume "$test_volume"

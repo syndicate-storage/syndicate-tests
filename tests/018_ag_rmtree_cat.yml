@@ -39,7 +39,7 @@
       command: mkdir -p /tmp/syndicate-AG-dataset/to_remove1/to_remove2/to_remove3
 
     - name: make random file in the AG dataset path
-      command: $tasksf_dir/mkfile.py random /tmp/syndicate-AG-dataset/to_remove1/to_remove2/to_remove3/local_file1 16384
+      command: $tasksf_dir/mkfile.py random /tmp/syndicate-AG-dataset/to_remove1/to_remove2/to_remove3/local_file 16384
 
 - name: config
   type: sequential
@@ -103,3 +103,9 @@
     - name: test ls
       command: $ls_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $cat_ug /to_remove1
       containserr: "Failed to stat '/to_remove1': No such file or directory"
+
+- name: clean up
+  type: sequential
+  tasks:
+    - name: delete volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" delete_volume "$test_volume"

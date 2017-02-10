@@ -64,6 +64,8 @@
       value: $SYNDICATE_UG_ROOT/syndicate-read
     - name: write_path
       value: $SYNDICATE_UG_ROOT/syndicate-write
+    - name: unlink_path
+      value: $SYNDICATE_UG_ROOT/syndicate-unlink
   debug: off
 
 - name: make local dir structure
@@ -148,3 +150,12 @@
     - name: read the same range from the put file
       command: $read_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $read_ug /$put_filename ${test_ranges[$filenum]}.offset ${test_ranges[$filenum]}.length
       rangecheckout: /tmp/t028/infiles/$test_filenames[$filenum] 0 ${test_ranges[$filenum]}.length
+
+- name: clean up
+  type: sequential
+  tasks:
+    - name: unlink files
+      command: $unlink_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $read_ug /$put_filename
+
+    - name: delete volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" delete_volume "$test_volume"

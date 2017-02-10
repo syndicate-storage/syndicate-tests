@@ -63,3 +63,9 @@
     - name: wait for UG to be online
       command: $tasksf_dir/waitgateway.py localhost 31111 20
       exit: 0
+
+- name: clean up
+  type: sequential
+  tasks:
+    - name: delete volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" delete_volume "$test_volume"

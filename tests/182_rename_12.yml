@@ -116,3 +116,9 @@
       command: fstest rename DEADCODE NULL
       compareout: "EFAULT"
       exit: 1
+
+- name: clean up
+  type: sequential
+  tasks:
+    - name: delete volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" delete_volume "$test_volume"

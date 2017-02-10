@@ -68,6 +68,8 @@
       value: $SYNDICATE_AG_ROOT/syndicate-ag
     - name: read_path
       value: $SYNDICATE_UG_ROOT/syndicate-read
+    - name: unlink_path
+      value: $SYNDICATE_UG_ROOT/syndicate-unlink
   debug: off
 
 - name: create ag dataset
@@ -134,3 +136,12 @@
       loop_on: cacheloop #nested loop, cache first iteration
       command: $read_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $read_ug /large_local_file $large_test_ranges.offset $large_test_ranges.length
       rangecheckout: $large_local_file $large_test_ranges.offset $large_test_ranges.length
+
+- name: clean up
+  type: sequential
+  tasks:
+    - name: unlink files
+      command: $unlink_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $read_ug /local_file /large_local_file
+
+    - name: delete volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" delete_volume "$test_volume"

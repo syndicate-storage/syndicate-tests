@@ -94,3 +94,9 @@
     - name: compare
       command: diff -q ${local_file}_${loop_var} ${mount_dir}/${loop_var}
       exit: 0
+
+- name: clean up
+  type: sequential
+  tasks:
+    - name: delete volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" delete_volume "$test_volume"

@@ -29,6 +29,8 @@
       value: $SYNDICATE_UG_ROOT/syndicate-stat
     - name: touch_path
       value: $SYNDICATE_UG_ROOT/syndicate-touch
+    - name: unlink_path
+      value: $SYNDICATE_UG_ROOT/syndicate-unlink
   debug: verbose
 
 - name: config
@@ -93,3 +95,12 @@
     - name: listxattr
       command: $listxattr_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $attr_ug /$attr_file
       containserr: "!${attrn}-value"
+
+- name: clean up
+  type: sequential
+  tasks:
+    - name: unlink files
+      command: $unlink_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $attr_ug /$attr_file
+
+    - name: delete volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" delete_volume "$test_volume"

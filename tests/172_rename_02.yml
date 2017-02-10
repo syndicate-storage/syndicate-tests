@@ -133,3 +133,9 @@
     - name: T1 - expect 0 rmdir [name242]
       command: fstest rmdir $mount_dir/${name242}
       compareout: "0"
+
+- name: clean up
+  type: sequential
+  tasks:
+    - name: delete volume
+      command: $SYNDICATE_TOOL -c "$syndicate_conf" delete_volume "$test_volume"

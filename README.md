@@ -310,9 +310,10 @@ The options described above are typically useful in the *__setup__* block wherea
   break : break in testrunner.py when this line is being processed
   gdb: run the task command in gdb
   ddd: run the task command in ddd
+  valgrind: run the command with valgrind
 ```
 
-####Examples:
+###Examples:
 
 The example below will print debug logs, stdout, and stderr to the terminal.
 
@@ -322,7 +323,9 @@ You can also add 'show' which will only _show_ the commands that would be execut
 
 ```debug: verbose show```
 
-Adding 'debug: break' to your test file will cause testrunner.py to break in the python debugger (via your terminal) in the section being executed and prior to running the command.
+#####Python debugger
+
+Adding 'debug: break' to your test file will cause testrunner.py to break in the python debugger (via your terminal) in the section being executed and prior to running the command.  Also remember that 'testwrapper.sh -d -n \<test number\>' will utilize the python debugger as well.
 
 ```
 - name: break in python debugger prior to running this command
@@ -332,7 +335,7 @@ Adding 'debug: break' to your test file will cause testrunner.py to break in the
       debug: break
       command: echo test command
 ```
-
+#####gdb/ddd
 You can also run the specified command in a debugger (i.e. _gdb_ or _ddd_)
 
 ```
@@ -360,3 +363,39 @@ and you can also add multiple breaks or debugger commands...
 ```
 
 Note: For the above example, since the debugger chosen was _ddd_, if you are running your testing environment in docker, you would need to start "sshd" then ssh to the container in order to run with X11 and see the GUI.
+
+#####Valgrind
+
+You can run any task command with valgrind symply by adding `debug: valgrind` to the task block.  This will run valgrind using the following valgrind default options, `--tool=memcheck --leak-check=yes --num-callers=20 --track-fds=yes`
+
+```
+- name: run valgrind with default options
+  type: sequential
+  tasks:
+    - name: run a tool with valgrind
+      debug: valgrind
+      command: /usr/local/bin/exampletool -c examplearg
+```
+
+If you add arguments to "valgrind", the testrunner knows to no longer use the default valgrind options, as shown below.
+
+```
+- name: run valgrind with your own options
+  type: sequential
+  tasks:
+    - name: run a tool with valgrind and your own valgrind options
+      debug: valgrind --tool=memcheck --tool=helgrind
+      command: /usr/local/bin/exampletool -c examplearg
+```
+
+If you don't want to write out all of the valgrind arguments, you can also specify valgrind tools (without specifying "valgrind").  The testrunner will automatically fill in the proper valgrind syntax.  Currently, the testrunner knows about the tools shown in the example below.
+
+```
+- name: run valgrind by simply specifying a valgrind tool
+  type: sequential
+  tasks:
+    - name: run a tool with a valgrind tool
+      debug: callgrind helgrind memcheck leakcheck
+      command: /usr/local/bin/exampletool -c examplearg
+```
+Lastly, if you plan to use callgrind, you should also consider installing kcachegrind.

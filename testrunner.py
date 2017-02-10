@@ -357,8 +357,8 @@ class CommandRunner():
                 sys.exit(1)
 
         debughelper.Check(self.task)
+        command = debughelper.ModifyCommand(command)
         if debughelper.rundebug:
-            command = debughelper.ModifyCommand(command)
             logger.debug("Running Task '%s': `%s`" % (self.task['name'], command))
             self.p = subprocess.Popen(shlex.split(command)) 
         elif self.run_in_shell:
@@ -1110,6 +1110,8 @@ class DebugHelper():
         self.debugcmd = ''
         self.debugger = ''
         self.rundebug = False
+        self.runvalgrind = False
+        self.valgrindcmd = ''
         self.show = False
         self.verbose = False
         self.stdoutoption = False
@@ -1129,6 +1131,27 @@ class DebugHelper():
             if 'verbose' in section['debug']:
                 self.verbose = True
                 logger.setLevel(logging.DEBUG) #turn on debug verbosity if specified in the yaml file
+            if 'valgrind' in section['debug'] or 'grind' in section['debug'] or 'check' in section['debug']:
+                self.runvalgrind = True
+                if 'valgrind' in section['debug']:
+                    valgrindargs = shlex.split(section['debug'])
+                    if len(valgrindargs) == 1: #no args are provided, use default memcheck/leak-check
+                        self.valgrindcmd = "valgrind --tool=memcheck --leak-check=yes --num-callers=20 --track-fds=yes" #add '--show-reachable=yes' if you also want "indirectly lost" blocks
+                    else:                      #otherwise run valgrind with the options provided
+                        self.valgrindcmd = section['debug']
+                else:                          #if valgrind isn't speficied but a common tool is listed instead
+                    self.valgrindcmd = ""
+                    if 'callgrind' in section['debug']:
+                        self.valgrindcmd = " --tool=callgrind"
+                    if 'helgrind' in section['debug']:
+                        self.valgrindcmd = self.valgrindcmd + " --tool=helgrind"
+                    if 'memcheck' in section['debug']:
+                        self.valgrindcmd = self.valgrindcmd + " --tool=memcheck"
+                    if 'leak-check' in section['debug']:
+                        self.valgrindcmd = self.valgrindcmd + " --leak-check=yes"
+                    self.valgrindcmd = "valgrind" + self.valgrindcmd
+            else:
+                self.runvalgrind = False
             if 'gdb' in section['debug'] or 'ddd' in section['debug']:
                 self.rundebug = True
                 if type(section['debug']) is list:
@@ -1145,18 +1168,25 @@ class DebugHelper():
                     pdb.set_trace() #debugger break
         else:
             self.rundebug = False
+            self.runvalgrind = False
         if 'comment' in section:
             logger.debug("*** %s ***" % section['comment'])
 
     def ModifyCommand(self, command):
-        c_array = shlex.split(command)        
-        newcmd=shlex.split(self.debugger + ' --command=debug.cmd ' + c_array.pop(0))
-        c_array.insert(0,'run')
-        gdbf = open('debug.cmd','w')
-        gdbf.write(self.debugcmd + '\n')
-        gdbf.write(' '.join(c_array)) #gdb/ddd loads a command file before running, if specified
-        logger.debug("Debugger will run:\n%s\n%s" % (self.debugcmd, ' '.join(c_array)))
-        return ' '.join(newcmd)
+        if self.runvalgrind:
+            newcmd=self.valgrindcmd + " " + command
+            return newcmd
+        elif self.rundebug:
+            c_array = shlex.split(command)        
+            newcmd=shlex.split(self.debugger + ' --command=debug.cmd ' + c_array.pop(0))
+            c_array.insert(0,'run')
+            gdbf = open('debug.cmd','w')
+            gdbf.write(self.debugcmd + '\n')
+            gdbf.write(' '.join(c_array)) #gdb/ddd loads a command file before running, if specified
+            logger.debug("Debugger will run:\n%s\n%s" % (self.debugcmd, ' '.join(c_array)))
+            return ' '.join(newcmd)
+        else:
+            return command
 
     def stdErr(self, string):
         if self.stderroption:

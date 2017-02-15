@@ -34,7 +34,7 @@
       value: $SYNDICATE_UG_ROOT/syndicate-touch
     - name: unlink_path
       value: $SYNDICATE_UG_ROOT/syndicate-unlink
-  debug: verbose stderr
+  debug: off
 
 - name: config
   type: sequential

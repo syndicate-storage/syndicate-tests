@@ -13,14 +13,9 @@
     - coord_ug
     - attr_file
     - attrn
-    - test_rg
   vars:
     - name: syndicate_conf
       value: $config_dir/syndicate.conf
-    - name: rg_driver
-      value: $SYNDICATE_PYTHON_ROOT/syndicate/rg/drivers/disk
-    - name: rg_path
-      value: $SYNDICATE_RG_ROOT/syndicate-rg
     - name: coord_path
       value: $SYNDICATE_RG_ROOT/syndicate-coord
     - name: listxattr_path
@@ -35,7 +30,7 @@
       value: $SYNDICATE_UG_ROOT/syndicate-touch
     - name: unlink_path
       value: $SYNDICATE_UG_ROOT/syndicate-unlink
-  debug: verbose stderr
+  debug: off
 
 - name: config
   type: sequential
@@ -45,26 +40,6 @@
 
     - name: add test volume
       command: $SYNDICATE_TOOL -c "$syndicate_conf" create_volume name=$test_volume description="test volume" blocksize=4096 email=$SYNDICATE_ADMIN
-
-    - name: create RG
-      command: $SYNDICATE_TOOL -c "$syndicate_conf" create_gateway name=$test_rg type=RG volume=$test_volume email=$SYNDICATE_ADMIN private_key=auto port=31112
-
-    - name: update RG
-      command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$test_rg caps=ALL port=31112 driver=$rg_driver
-
-- name: daemon RG
-  type: daemon
-  tasks:
-    - name: start RG
-      command: $rg_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_rg
-      exit: 0
-
-- name: check syndicate is mounted
-  type: sequential
-  tasks:
-    - name: wait for RG to be online
-      command: $tasksf_dir/waitgateway.py localhost 31112 20
-      exit: 0
 
 - name: setup UGs
   type: sequential
@@ -81,14 +56,6 @@
     - name: update coord UG
       command: $SYNDICATE_TOOL -c "$syndicate_conf" update_gateway name=$coord_ug caps=ALL
 
-- name: daemon coord
-  type: daemon
-  tasks:
-    - name: start coord
-      command: $coord_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $attr_ug
-      sleep: 2
-      exit: 0
-
 - name: test touch file
   type: sequential
   tasks:
@@ -101,6 +68,14 @@
     - name: setxattr
       command: $setxattr_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $attr_ug /$attr_file ${attrn}-name ${attrn}-value
 
+- name: daemon coord
+  type: daemon
+  tasks:
+    - name: start coord
+      command: $coord_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $attr_ug /$attr_file
+      sleep: 2
+      exit: 0
+
 - name: run removexattr tests
   type: sequential
   tasks:
@@ -112,13 +87,13 @@
   tasks:
     - name: listxattr
       command: $listxattr_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $coord_ug /$attr_file
-      containserr: "!${attrn}-value"
+      containsout: "!${attrn}-value"
 
 - name: clean up
   type: sequential
   tasks:
     - name: unlink files
-      command: $unlink_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $attr_ug /$attr_file
+      command: $unlink_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $coord_ug /$attr_file
 
     - name: delete volume
       command: $SYNDICATE_TOOL -c "$syndicate_conf" delete_volume "$test_volume"

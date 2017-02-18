@@ -26,7 +26,7 @@
       value: $SYNDICATE_UG_ROOT/syndicate-touch
     - name: unlink_path
       value: $SYNDICATE_UG_ROOT/syndicate-unlink
-  debug: off
+  debug: verbose stdout stderr
 
 - name: config
   type: sequential
@@ -69,8 +69,7 @@
   tasks:
     - name: listxattr
       command: $listxattr_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $attr_ug /$attr_file
-      exit: 1
-      containsout: "!${attrn}-value"
+      containsout: "!${attrn}-name"
 
 - name: clean up
   type: sequential

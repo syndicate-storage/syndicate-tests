@@ -79,7 +79,7 @@
   tasks:
     - name: listxattr
       command: $listxattr_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $coord_ug /$attr_file
-      containsout: ${attrn}-value
+      containsout: ${attrn}-name
 
 - name: clean up
   type: sequential

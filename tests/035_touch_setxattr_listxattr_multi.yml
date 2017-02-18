@@ -62,11 +62,11 @@
     - name: listxattr
       command: $listxattr_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $attr_ug /$attr_file
       containsout: 
-        - ${attrn[0]}-value 
-        - ${attrn[1]}-value
-        - ${attrn[2]}-value
-        - ${attrn[3]}-value
-        - ${attrn[4]}-value
+        - ${attrn[0]}-name 
+        - ${attrn[1]}-name
+        - ${attrn[2]}-name
+        - ${attrn[3]}-name
+        - ${attrn[4]}-name
 
 - name: clean up
   type: sequential

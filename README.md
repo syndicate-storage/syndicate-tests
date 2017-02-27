@@ -24,6 +24,8 @@ follows:
 ```
 usage: testwrapper.sh [-d] [-i] [-v] [-n <test number>]
 
+   -c     run callgrind on all tests, by default, output is saved to *.callgrind files in "output", along with a summary plot per each test
+
    -d     Debug testrunner.py
 
    -i     Interactively run testwrapper.sh, asks (y/n) whether to run each test
@@ -31,6 +33,8 @@ usage: testwrapper.sh [-d] [-i] [-v] [-n <test number>]
    -n     number
             The test number specified
             Either "-n 1" or "-n 001" would run the "001_setup.yml" test
+
+   -m     run memcheck/valgrind on all tests, by default, output is compiled in "output" under *.valgrind files
 
    -v     verbose, run with DEBUG logging
 ```

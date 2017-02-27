@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Runs syndicate tests in PATHDIR, puts TAP results in TESTDIR
 # Syntax:
+#   -c                  callgrind on all tests
 #   -d 			run with python debugger
 #   -i			interactively ask which test to run
 #   -n <test number>	run the test number specified
+#   -m                  memcheck / valgrind on all tests
 #   -v                  enable verbose testrunner debug logs
 
 debug=''
@@ -44,20 +46,44 @@ if [ $testnumber -eq 0 ]; then
          runtest=1
       fi
     fi
+    valgrindcmd=''
+    valgrindmsg=''
+    if [[ $@ =~ -m ]]; then
+      valgrindcmd="-m ${OUTPUTDIR}/${testname%.*}.valgrind"
+      valgrindmsg=" (Memcheck)"
+    fi
     if [ $runtest == 1 ]; then
       if [[ -n `cat $test | grep "debug:.*disable"` ]]; then
         echo "Skipping test: '${testname}' (disabled)"
       else
-        echo "Running test: '${testname}'"
-        python $debug ${CONFIG_ROOT}/testrunner.py $verbosedebug -t ${RESULTDIR}/${testname%.*}.tap ${test} ${OUTPUTDIR}/${testname%.*}.out
+        echo "Running test: '${testname}'${valgrindmsg}"
+        python $debug ${CONFIG_ROOT}/testrunner.py $verbosedebug $valgrindcmd -t ${RESULTDIR}/${testname%.*}.tap ${test} ${OUTPUTDIR}/${testname%.*}.out
+        if [[ $@ =~ -c ]]; then
+          valgrindcmd="-c ${OUTPUTDIR}/${testname%.*}.callgrind"
+          echo "            : '${testname}' (Callgrind)"
+          python $debug ${CONFIG_ROOT}/testrunner.py $valgrindcmd -t ${OUTPUTDIR}/${testname%.*}.tmptap ${test} ${OUTPUTDIR}/${testname%.*}.tmpout
+          rm ${OUTPUTDIR}/${testname%.*}.tmptap ${OUTPUTDIR}/${testname%.*}.tmpout
+        fi
       fi
     fi
   done
 else
   test=`find ${TESTDIR} -name "*${testnumber}_*.yml"`
   testname=${test##*/}
-  echo "Running test: '${testname}'"
-  python $debug ${CONFIG_ROOT}/testrunner.py $verbosedebug -t ${RESULTDIR}/${testname%.*}.tap ${test} ${OUTPUTDIR}/${testname%.*}.out
+  valgrindcmd=''
+  valgrindmsg=''
+  if [[ $@ =~ -m ]]; then
+    valgrindcmd="-m ${OUTPUTDIR}/${testname%.*}.valgrind"
+    valgrindmsg=" (Memcheck)"
+  fi
+  echo "Running test: '${testname}'${valgrindmsg}"
+  python $debug ${CONFIG_ROOT}/testrunner.py $verbosedebug $valgrindcmd -t ${RESULTDIR}/${testname%.*}.tap ${test} ${OUTPUTDIR}/${testname%.*}.out
+  if [[ $@ =~ -c ]]; then
+    valgrindcmd="-c ${OUTPUTDIR}/${testname%.*}.callgrind"
+    echo "            : '${testname}' (Callgrind)"
+    python $debug ${CONFIG_ROOT}/testrunner.py $valgrindcmd -t ${OUTPUTDIR}/${testname%.*}.tmptap ${test} ${OUTPUTDIR}/${testname%.*}.tmpout
+    rm ${OUTPUTDIR}/${testname%.*}.tmptap ${OUTPUTDIR}/${testname%.*}.tmpout
+  fi
 fi
 
 echo "Copying logs..."

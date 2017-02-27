@@ -8,6 +8,7 @@ import copy
 import datetime
 import itertools
 import logging
+import magic
 import os
 import pdb
 import pprint
@@ -54,6 +55,10 @@ def parse_args():
                         type=argparse.FileType('w'),
                         help="muxed output/error filename")
 
+    parser.add_argument('-c', '--callgrind',
+                        default=False,
+                        help="run valgrind callgrind, specify output file")
+
     parser.add_argument('-d', '--debug',
                         action="store_true",
                         help="print debugging info")
@@ -61,6 +66,12 @@ def parse_args():
     parser.add_argument('-i', '--immediate',
                         action="store_true",
                         help="immediately print subprocess stdout/err")
+
+    parser.add_argument('-m', '--memcheck',
+                        const='stderr',
+                        default=False,
+                        nargs='?',
+                        help="run valgrind memcheck, specify output to stderr (default), stdout, file name, or ip:socket")
 
     parser.add_argument('-t', '--tap_file',
                         help="TAP output filename")
@@ -287,6 +298,7 @@ class CommandRunner():
         self.err_th = {}
         self.start_t = None
         self.end_t = None
+        self.valgrindoutfile = ''
 
         self.taskb_name = taskb_name
         self.q = collections.deque()
@@ -357,8 +369,9 @@ class CommandRunner():
                 sys.exit(1)
 
         debughelper.Check(self.task)
-        command = debughelper.ModifyCommand(command)
-        if debughelper.rundebug:
+        command = debughelper.ModifyCommand(command, self.task['name'])
+        self.valgrindoutfile = debughelper.valgrindoutfile
+        if debughelper.debugrun:
             logger.debug("Running Task '%s': `%s`" % (self.task['name'], command))
             self.p = subprocess.Popen(shlex.split(command)) 
         elif self.run_in_shell:
@@ -380,7 +393,7 @@ class CommandRunner():
 
         self.start_t = time.time()
 
-        if not debughelper.show and not debughelper.rundebug:
+        if not debughelper.show and not debughelper.debugrun:
             self.out_th = threading.Thread(
                         target=self.__pipe_reader,
                         args=(self.p.stdout, "o",
@@ -448,13 +461,13 @@ class CommandRunner():
 
         failures = []
 
-        if not debughelper.rundebug:
+        if not debughelper.debugrun:
             self.out_th.join()
             self.err_th.join()
 
         self.p.wait()
 
-        if not debughelper.rundebug:
+        if not debughelper.debugrun:
             logger.debug("Duration of task '%s': %.6f" %
                      (self.task['name'], self.duration()))
 
@@ -704,7 +717,7 @@ class CommandRunner():
 
         if tap_writer:
 
-            if not debughelper.rundebug:
+            if not debughelper.debugrun:
                 yaml_data = {"duration_ms": "%.6f" % self.duration(1000),
                              "command": self.task['repl_command']}
                 testname = "%s : %s" % (self.taskb_name, self.task['name'])
@@ -714,6 +727,20 @@ class CommandRunner():
                     tap_writer.record_test(False, testname, yaml_data)
                 else:
                     tap_writer.record_test(True, testname, yaml_data)
+
+        if debughelper.valgrindglobal and self.valgrindoutfile is not '' and os.path.exists(self.valgrindoutfile):
+            vgout = open(args.memcheck,"a")
+            vgrin = open(self.valgrindoutfile,"r")
+            vgout.write('#'*80 + "\n" + "# " + self.task['name'] + "\n" + '#'*80 + "\n")
+            vgout.write(vgrin.read())
+            vgout.close()
+            vgrin.close()
+            os.unlink(self.valgrindoutfile)
+
+        if debughelper.callgrindglobal and self.valgrindoutfile is not '':
+            p = subprocess.Popen(shlex.split("gprof2dot -f callgrind " + self.valgrindoutfile), stdout=subprocess.PIPE)
+            subprocess.check_output(shlex.split("dot -Tpng -o " + self.valgrindoutfile + ".plot.png"), stdin=p.stdout)
+            p.wait()
 
         return {"failures": failures, "q": self.q}
 
@@ -976,7 +1003,7 @@ class TaskBlocksRunner():
 
             # create the task blocks
             if taskb['type'] == "setup":
-                self.setup_block(taskb)
+                self.setup_block(taskb, tap_writer)
 
             elif taskb['type'] == "daemon":
                 daemon_runner = RunDaemon(taskb, tap_writer)
@@ -1014,7 +1041,7 @@ class TaskBlocksRunner():
         if tap_writer:
             tap_writer.write_header(num_tests)
 
-    def setup_block(self, setupb):
+    def setup_block(self, setupb, tap_writer):
 
         global debughelper
 
@@ -1067,7 +1094,7 @@ class TaskBlocksRunner():
 
                 valueloop(vloop['name'], vloop['values'])
 
-        debughelper = DebugHelper(setupb)
+        debughelper = DebugHelper(setupb, tap_writer)
 
     def run_task_blocks(self):
 
@@ -1105,17 +1132,38 @@ class TaskBlocksRunner():
 
 class DebugHelper():
 
-    def __init__(self, section):
+    def __init__(self, section, tap_writer):
+    
+        global args
 
+        #modify the following defaults
+        self.defaultvalgrindargs = "--tool=memcheck --leak-check=full --num-callers=20 --track-fds=yes" #add '--show-reachable=yes' if you also want "indirectly lost" blocks, or add '--trace-children=yes' to trace sub-process/forked processes
+        self.defaultcallgrindargs = "--tool=callgrind"
+        self.valgrindexcludelist=['cat','cp','diff','fstest','grep','ls','mkdir','mv','openssl','rm','sleep','test']       #exclude these binary executables when valgrindglobal is enabled
+
+        self.callgrindglobal = False
         self.debugcmd = ''
         self.debugger = ''
-        self.rundebug = False
-        self.runvalgrind = False
-        self.valgrindcmd = ''
+        self.debugrun = False
         self.show = False
-        self.verbose = False
         self.stdoutoption = False
         self.stderroption = False
+        self.tap_writer = tap_writer
+        self.valgrindcount = 0
+        self.valgrindargs = ''
+        self.valgrindglobal = False
+        self.valgrindoutfile = ''
+        self.valgrindrun = False
+        self.verbose = False
+
+        if args.memcheck and args.callgrind:
+            logger.error("valgrind does not support memcheck (-m) and callcheck (-c) together")
+            sys.exit(1)
+        if args.memcheck:
+            self.valgrindglobal = True
+        if args.callgrind:
+            self.callgrindglobal = True
+
         self.Check(section)
     
     def Check(self, section):
@@ -1132,28 +1180,31 @@ class DebugHelper():
                 self.verbose = True
                 logger.setLevel(logging.DEBUG) #turn on debug verbosity if specified in the yaml file
             if 'valgrind' in section['debug'] or 'grind' in section['debug'] or 'check' in section['debug']:
-                self.runvalgrind = True
-                if 'valgrind' in section['debug']:
+                if 'type' in section and 'setup' in section['type']:
+                    self.valgrindglobal = True
+                elif 'valgrind' in section['debug']:
+                    self.valgrindrun = True
                     valgrindargs = shlex.split(section['debug'])
                     if len(valgrindargs) == 1: #no args are provided, use default memcheck/leak-check
-                        self.valgrindcmd = "valgrind --tool=memcheck --leak-check=yes --num-callers=20 --track-fds=yes" #add '--show-reachable=yes' if you also want "indirectly lost" blocks
+                        self.valgrindargs = self.defaultvalgrindargs
                     else:                      #otherwise run valgrind with the options provided
-                        self.valgrindcmd = section['debug']
+                        valgrindargs.pop(0)
+                        self.valgrindargs = ' '.join(valgrindargs)
                 else:                          #if valgrind isn't speficied but a common tool is listed instead
-                    self.valgrindcmd = ""
+                    self.valgrindrun = True
+                    self.valgrindargs = ""
                     if 'callgrind' in section['debug']:
-                        self.valgrindcmd = " --tool=callgrind"
-                    if 'helgrind' in section['debug']:
-                        self.valgrindcmd = self.valgrindcmd + " --tool=helgrind"
-                    if 'memcheck' in section['debug']:
-                        self.valgrindcmd = self.valgrindcmd + " --tool=memcheck"
+                        self.valgrindargs = "--tool=callgrind"
+                    elif 'helgrind' in section['debug']:
+                        self.valgrindargs = "--tool=helgrind"
+                    elif 'memcheck' in section['debug']:
+                        self.valgrindargs = "--tool=memcheck"
                     if 'leak-check' in section['debug']:
-                        self.valgrindcmd = self.valgrindcmd + " --leak-check=yes"
-                    self.valgrindcmd = "valgrind" + self.valgrindcmd
+                        self.valgrindargs = self.valgrindargs + " --leak-check=yes"
             else:
-                self.runvalgrind = False
+                self.valgrindrun = False
             if 'gdb' in section['debug'] or 'ddd' in section['debug']:
-                self.rundebug = True
+                self.debugrun = True
                 if type(section['debug']) is list:
                     strlist = copy.deepcopy(section['debug'])
                     self.debugger = strlist.pop(0)
@@ -1163,20 +1214,52 @@ class DebugHelper():
                     self.debugger = debugcmdlist.pop(0)
                     self.debugcmd = 'set breakpoint pending on\n' + ' '.join(debugcmdlist)
             else:
-                self.rundebug = False
+                self.debugrun = False
                 if 'break' in section['debug']:
                     pdb.set_trace() #debugger break
         else:
-            self.rundebug = False
-            self.runvalgrind = False
+            self.debugrun = False
+            self.valgrindrun = False
         if 'comment' in section:
             logger.debug("*** %s ***" % section['comment'])
 
-    def ModifyCommand(self, command):
-        if self.runvalgrind:
-            newcmd=self.valgrindcmd + " " + command
+    def ModifyCommand(self, command, taskname):
+        self.valgrindoutfile=''
+        self.callgrindoutfile=''
+        if self.valgrindrun:
+            time.sleep(0.2) #valgrind can be a little sensitive
+            newcmd="valgrind " + self.valgrindargs + " " + command
             return newcmd
-        elif self.rundebug:
+        elif self.valgrindglobal or self.callgrindglobal:
+            time.sleep(0.2) #valgrind can be a little sensitive
+            newcmd=command
+            c_array = shlex.split(command)
+            filename = c_array.pop(0)
+            if filename not in self.valgrindexcludelist:                 #is this not an excluded file
+                filetype=magic.from_file(filename)                       #get the file type
+                if 'executable' in filetype and 'ASCII' not in filetype: #check if this is a binary executable
+                    valgrindargs=''
+                    valgrindcstr="%.3d" % (self.tap_writer.current_test + 1)
+                    if self.valgrindglobal:
+                        if args.memcheck is 'stdout': #if valgrind is enabled, set it's output to stdout/stderr/ip:socket/file
+                            valgrindargs=self.defaultvalgrindargs + " --log-fd=1"
+                        elif ":" in args.memcheck:
+                            valgrindargs=self.defaultvalgrindargs + " --log-socket=" + args.memcheck
+                        elif args.memcheck is not 'stderr':                  #file specified
+                            self.valgrindoutfile=args.memcheck + "." + valgrindcstr
+                            valgrindargs=self.defaultvalgrindargs + " --log-file=" + self.valgrindoutfile
+                            if self.valgrindcount == 0:
+                                if os.path.exists(args.memcheck):
+                                    os.unlink(args.memcheck)
+                        else: #stderr
+                            valgrindargs = self.defaultvalgrindargs
+                    if self.callgrindglobal:
+                        self.valgrindoutfile=args.callgrind + "." + valgrindcstr
+                        valgrindargs = self.defaultcallgrindargs + " --callgrind-out-file=" + self.valgrindoutfile
+                    self.valgrindcount+=1
+                    newcmd="valgrind " + valgrindargs + " " + command    #run valgrind
+            return newcmd
+        elif self.debugrun:
             c_array = shlex.split(command)        
             newcmd=shlex.split(self.debugger + ' --command=debug.cmd ' + c_array.pop(0))
             c_array.insert(0,'run')

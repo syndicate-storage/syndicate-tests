@@ -369,7 +369,7 @@ class CommandRunner():
                 sys.exit(1)
 
         debughelper.Check(self.task)
-        command = debughelper.ModifyCommand(command, self.task['name'])
+        command = debughelper.ModifyCommand(command, self.task)
         self.valgrindoutfile = debughelper.valgrindoutfile
         if debughelper.debugrun:
             logger.debug("Running Task '%s': `%s`" % (self.task['name'], command))
@@ -783,6 +783,7 @@ class RunParallel():
         taskscontainer = []
 
         index = 0
+        loopidx=0
         for loop_var in loop_vars[varname]:
             tasks = []
             for task in taskblock['tasks']:
@@ -799,6 +800,7 @@ class RunParallel():
                 
                 if 'loop_on' in task:                                 #the task also has a loop_on option, making nested loops possible
                     outerindex = index
+                    prevloopidx = loopidx
                     index = 0
                     tasks = []
                     nested_varname = task['loop_on']                  #get the varname for the individual task
@@ -827,10 +829,13 @@ class RunParallel():
                         for key in ['name', 'saveout', 'saveerr', ]:
                             if key in task:
                                 modified_task[key] = "%s-%d" % (task[key], index)
+                        modified_task['loopidx'] = loopidx
                         tasks.append(modified_task)
                         self.numtasks+=1
+                        loopidx+=1
                     index = outerindex
-                    r_vars[nvarkeystr] = loop_vars[nested_varname][0]     #be sure to reset variables after the loop
+                    r_vars[nvarkeystr] = loop_vars[nested_varname][0] #be sure to reset variables after the loop
+                    loopidx = prevloopidx                             #reset loopidx for valgrind, this should run only the 1st task of each multi-task set
                 else:
                     index+=1
                     r_vars['loop_index'] = str(index)
@@ -847,9 +852,11 @@ class RunParallel():
                         if key in task:
                             modified_task[key] = "%s-%d" % (task[key], index)
 
+                    modified_task['loopidx'] = loopidx
                     tasks.append(modified_task)
                     self.numtasks+=1
             taskscontainer.append(tasks)
+            loopidx+=1
         r_vars['loop_index'] = str(index)
         r_vars[varkeystr] = loop_vars[varname][0]
         return taskscontainer
@@ -1223,14 +1230,18 @@ class DebugHelper():
         if 'comment' in section:
             logger.debug("*** %s ***" % section['comment'])
 
-    def ModifyCommand(self, command, taskname):
+    def ModifyCommand(self, command, task):
+        taskname=task['name']
+        loopidx=0
         self.valgrindoutfile=''
         self.callgrindoutfile=''
+        if 'loopidx' in task:
+            loopidx=task['loopidx']
         if self.valgrindrun:
             time.sleep(0.2) #valgrind can be a little sensitive
             newcmd="valgrind " + self.valgrindargs + " " + command
             return newcmd
-        elif self.valgrindglobal or self.callgrindglobal:
+        elif (self.valgrindglobal or self.callgrindglobal) and loopidx < 1:
             time.sleep(0.2) #valgrind can be a little sensitive
             newcmd=command
             c_array = shlex.split(command)
@@ -1242,12 +1253,12 @@ class DebugHelper():
                     valgrindcstr="%.3d" % (self.tap_writer.current_test + 1)
                     if self.valgrindglobal:
                         if args.memcheck is 'stdout': #if valgrind is enabled, set it's output to stdout/stderr/ip:socket/file
-                            valgrindargs=self.defaultvalgrindargs + " --log-fd=1"
+                            valgrindargs=self.defaultvalgrindargs + " --log-fd=1 --xml=yes --xml-fd=1"
                         elif ":" in args.memcheck:
-                            valgrindargs=self.defaultvalgrindargs + " --log-socket=" + args.memcheck
-                        elif args.memcheck is not 'stderr':                  #file specified
+                            valgrindargs=self.defaultvalgrindargs + " --log-socket=" + args.memcheck + " --xml=yes --xml-socket=" + int(args.memcheck) + 1
+                        elif args.memcheck is not 'stderr':              #file specified
                             self.valgrindoutfile=args.memcheck + "." + valgrindcstr
-                            valgrindargs=self.defaultvalgrindargs + " --log-file=" + self.valgrindoutfile
+                            valgrindargs=self.defaultvalgrindargs + " --log-file=" + self.valgrindoutfile + " --xml=yes --xml-file=" + self.valgrindoutfile + ".xml"
                             if self.valgrindcount == 0:
                                 if os.path.exists(args.memcheck):
                                     os.unlink(args.memcheck)

@@ -91,6 +91,7 @@ cp -r /tmp/synd-* $OUTPUTDIR
 # change permissions.
 # ${OUTPUTDIR} and ${OUTPUTDIR}/.gitignore are owned by the host account thus shouldn't be modified.
 chmod -R a+rwx ${OUTPUTDIR}/*.out
+chmod -R a+rwx ${OUTPUTDIR}/[0-9][0-9][0-9]_*
 chmod -R a+rwx ${OUTPUTDIR}/synd-*
 
 echo "End Time:   `date +'%F %T'`"

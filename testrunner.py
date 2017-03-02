@@ -1238,11 +1238,11 @@ class DebugHelper():
         if 'loopidx' in task:
             loopidx=task['loopidx']
         if self.valgrindrun:
-            time.sleep(0.2) #valgrind can be a little sensitive
+            time.sleep(1.0) #valgrind can be a little sensitive
             newcmd="valgrind " + self.valgrindargs + " " + command
             return newcmd
         elif (self.valgrindglobal or self.callgrindglobal) and loopidx < 1:
-            time.sleep(0.2) #valgrind can be a little sensitive
+            time.sleep(1.0) #valgrind can be a little sensitive
             newcmd=command
             c_array = shlex.split(command)
             filename = c_array.pop(0)

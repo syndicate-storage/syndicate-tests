@@ -16,12 +16,16 @@ import random
 import re
 import shlex
 import signal
-import subprocess
 import sys
 import tempfile
 import threading
 import time
 import yaml
+
+if os.name == 'posix' and sys.version_info[0] < 3:
+    import subprocess32 as subprocess
+else:
+    import subprocess
 
 # logging
 log_level = logging.ERROR
@@ -299,6 +303,7 @@ class CommandRunner():
         self.start_t = None
         self.end_t = None
         self.valgrindoutfile = ''
+        self.timeout = 180 
 
         self.taskb_name = taskb_name
         self.q = collections.deque()
@@ -461,11 +466,30 @@ class CommandRunner():
 
         failures = []
 
+        if os.name == 'posix' and sys.version_info[0] < 3:
+            try:
+                self.p.wait(self.timeout)
+            except subprocess.TimeoutExpired:
+                logger.debug("Timeout exceeded, terminating task '%s'" % self.task['name'])
+                self.p.terminate()
+                self.p.poll()
+        else:
+            self.p.wait()
+
+        #process gprof files if they are created
+        if os.path.exists("gmon.out"):
+            cstr="%.3d" % (tap_writer.current_test + 1)
+            p1 = subprocess.Popen(shlex.split("gprof " + debughelper.commandfilename), stdout=subprocess.PIPE)
+            p2 = subprocess.Popen(shlex.split("gprof2dot"), stdin=p1.stdout, stdout=subprocess.PIPE)
+            p1.stdout.close()
+            subprocess.check_output(shlex.split("dot -Tpng -o gmon." + cstr + ".png"), stdin=p2.stdout)
+            p2.wait()
+            os.rename("gmon.out", "gmon.out." + cstr)
+            
+
         if not debughelper.debugrun:
             self.out_th.join()
             self.err_th.join()
-
-        self.p.wait()
 
         if not debughelper.debugrun:
             logger.debug("Duration of task '%s': %.6f" %
@@ -480,12 +504,19 @@ class CommandRunner():
         if 'exit' in self.task:
             exit = self.task['exit']
 
-        if self.p.returncode == exit:
+        retcode = self.p.poll()
+
+        if retcode == exit:
             logger.debug("Task '%s' exited correctly: %s" %
                          (self.task['name'], self.p.returncode))
+        elif retcode == -15:
+            exit_fail = ("Task '%s' timed out (exceeds %d seconds)" %
+                         (self.task['name'], self.timeout))
+            logger.error(exit_fail)
+            failures.append(exit_fail)
         else:
             exit_fail = ("Task '%s' incorrect exit: %s, expecting %s" %
-                         (self.task['name'], self.p.returncode, exit))
+                         (self.task['name'], retcode, exit))
             logger.error(exit_fail)
             failures.append(exit_fail)
 
@@ -1235,19 +1266,19 @@ class DebugHelper():
         loopidx=0
         self.valgrindoutfile=''
         self.callgrindoutfile=''
+        c_array = shlex.split(command)
+        self.commandfilename = c_array.pop(0)
         if 'loopidx' in task:
             loopidx=task['loopidx']
         if self.valgrindrun:
-            time.sleep(1.0) #valgrind can be a little sensitive
+            time.sleep(1.5) #valgrind can be a little sensitive
             newcmd="valgrind " + self.valgrindargs + " " + command
             return newcmd
         elif (self.valgrindglobal or self.callgrindglobal) and loopidx < 1:
-            time.sleep(1.0) #valgrind can be a little sensitive
+            time.sleep(1.5) #valgrind can be a little sensitive
             newcmd=command
-            c_array = shlex.split(command)
-            filename = c_array.pop(0)
-            if filename not in self.valgrindexcludelist:                 #is this not an excluded file
-                filetype=magic.from_file(filename)                       #get the file type
+            if self.commandfilename not in self.valgrindexcludelist:                 #is this not an excluded file
+                filetype=magic.from_file(commandfilename)                       #get the file type
                 if 'executable' in filetype and 'ASCII' not in filetype: #check if this is a binary executable
                     valgrindargs=''
                     valgrindcstr="%.3d" % (self.tap_writer.current_test + 1)
@@ -1271,8 +1302,7 @@ class DebugHelper():
                     newcmd="valgrind " + valgrindargs + " " + command    #run valgrind
             return newcmd
         elif self.debugrun:
-            c_array = shlex.split(command)        
-            newcmd=shlex.split(self.debugger + ' --command=debug.cmd ' + c_array.pop(0))
+            newcmd=shlex.split(self.debugger + ' --command=debug.cmd ' + self.commandfilename)
             c_array.insert(0,'run')
             gdbf = open('debug.cmd','w')
             gdbf.write(self.debugcmd + '\n')

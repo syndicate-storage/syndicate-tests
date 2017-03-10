@@ -485,7 +485,16 @@ class CommandRunner():
             subprocess.check_output(shlex.split("dot -Tpng -o gmon." + cstr + ".png"), stdin=p2.stdout)
             p2.wait()
             os.rename("gmon.out", "gmon.out." + cstr)
-            
+
+        #process profile files from sprof if available
+        if os.environ.get('LD_PROFILE') is not None:
+            filename = os.environ.get('LD_PROFILE') + '.profile'
+            if os.path.exists(filename) and os.environ.get('LD_PROFILE_PATH') is not None:
+                cstr="%.3d" % (tap_writer.current_test + 1)
+                with open(filename + "." + cstr + ".log", "w") as outfile:
+                    p1 = subprocess.Popen(shlex.split("sprof " + os.environ.get('LD_PROFILE_PATH') + "/" + os.environ.get('LD_PROFILE') + " -p"), stdout=outfile)
+                p1.wait()
+                os.rename(filename, filename + "." + cstr)
 
         if not debughelper.debugrun:
             self.out_th.join()
@@ -1180,6 +1189,7 @@ class DebugHelper():
         self.valgrindexcludelist=['cat','cp','diff','fstest','grep','ls','mkdir','mv','openssl','rm','sleep','test']       #exclude these binary executables when valgrindglobal is enabled
 
         self.callgrindglobal = False
+        self.commandfilename = ''
         self.debugcmd = ''
         self.debugger = ''
         self.debugrun = False

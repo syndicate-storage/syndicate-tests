@@ -1288,7 +1288,7 @@ class DebugHelper():
             time.sleep(1.5) #valgrind can be a little sensitive
             newcmd=command
             if self.commandfilename not in self.valgrindexcludelist:                 #is this not an excluded file
-                filetype=magic.from_file(commandfilename)                       #get the file type
+                filetype=magic.from_file(self.commandfilename)                       #get the file type
                 if 'executable' in filetype and 'ASCII' not in filetype: #check if this is a binary executable
                     valgrindargs=''
                     valgrindcstr="%.3d" % (self.tap_writer.current_test + 1)

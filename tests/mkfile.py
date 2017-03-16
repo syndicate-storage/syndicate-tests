@@ -17,7 +17,7 @@
 #
 #     Options:
 #
-#         filetype        the type of file to create, as described above
+#         filetype    the type of file to create, as described above
 #
 #         filename    the name of the file to be created
 #

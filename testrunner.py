@@ -77,6 +77,10 @@ def parse_args():
                         nargs='?',
                         help="run valgrind memcheck, specify output to stderr (default), stdout, file name, or ip:socket")
 
+    parser.add_argument('-o', '--operf',
+                        default=False,
+                        help="run operf")
+
     parser.add_argument('-t', '--tap_file',
                         help="TAP output filename")
 
@@ -376,6 +380,7 @@ class CommandRunner():
         debughelper.Check(self.task)
         command = debughelper.ModifyCommand(command, self.task)
         self.valgrindoutfile = debughelper.valgrindoutfile
+
         if debughelper.debugrun:
             logger.debug("Running Task '%s': `%s`" % (self.task['name'], command))
             self.p = subprocess.Popen(shlex.split(command)) 
@@ -414,8 +419,12 @@ class CommandRunner():
 
             self.err_th.daemon = True
             self.err_th.start()
+
+        if debughelper.delay > 0.0:
+            logger.debug("Valgrind sleep delay for %0.2f seconds" % debughelper.delay)
+            time.sleep(debughelper.delay)
         
-        # optional sleep after execution
+        # optional sleep after start of execution
         if 'sleep' in self.task:
             logger.debug("Sleeping for %s seconds" % self.task['sleep'])
             if not debughelper.show:
@@ -475,26 +484,6 @@ class CommandRunner():
                 self.p.poll()
         else:
             self.p.wait()
-
-        #process gprof files if they are created
-        if os.path.exists("gmon.out"):
-            cstr="%.3d" % (tap_writer.current_test + 1)
-            p1 = subprocess.Popen(shlex.split("gprof " + debughelper.commandfilename), stdout=subprocess.PIPE)
-            p2 = subprocess.Popen(shlex.split("gprof2dot"), stdin=p1.stdout, stdout=subprocess.PIPE)
-            p1.stdout.close()
-            subprocess.check_output(shlex.split("dot -Tpng -o gmon." + cstr + ".png"), stdin=p2.stdout)
-            p2.wait()
-            os.rename("gmon.out", "gmon.out." + cstr)
-
-        #process profile files from sprof if available
-        if os.environ.get('LD_PROFILE') is not None:
-            filename = os.environ.get('LD_PROFILE') + '.profile'
-            if os.path.exists(filename) and os.environ.get('LD_PROFILE_PATH') is not None:
-                cstr="%.3d" % (tap_writer.current_test + 1)
-                with open(filename + "." + cstr + ".log", "w") as outfile:
-                    p1 = subprocess.Popen(shlex.split("sprof " + os.environ.get('LD_PROFILE_PATH') + "/" + os.environ.get('LD_PROFILE') + " -p"), stdout=outfile)
-                p1.wait()
-                os.rename(filename, filename + "." + cstr)
 
         if not debughelper.debugrun:
             self.out_th.join()
@@ -768,6 +757,39 @@ class CommandRunner():
                 else:
                     tap_writer.record_test(True, testname, yaml_data)
 
+        #process gprof files if they are created
+        if os.path.exists("gmon.out"):
+            cstr="%.3d" % (tap_writer.current_test + 1)
+            p1 = subprocess.Popen(shlex.split("gprof " + debughelper.commandfilename), stdout=subprocess.PIPE)
+            p2 = subprocess.Popen(shlex.split("gprof2dot"), stdin=p1.stdout, stdout=subprocess.PIPE)
+            p1.stdout.close()
+            subprocess.check_output(shlex.split("dot -Tpng -o gmon." + cstr + ".png"), stdin=p2.stdout)
+            p2.wait()
+            os.rename("gmon.out", "gmon.out." + cstr)
+
+        #process profile files from sprof if available
+        if os.environ.get('LD_PROFILE') is not None:
+            filename = os.environ.get('LD_PROFILE') + '.profile'
+            if os.path.exists(filename) and os.environ.get('LD_PROFILE_PATH') is not None:
+                cstr="%.3d" % (tap_writer.current_test + 1)
+                with open(filename + "." + cstr + ".log", "w") as outfile:
+                    p1 = subprocess.Popen(shlex.split("sprof " + os.environ.get('LD_PROFILE_PATH') + "/" + os.environ.get('LD_PROFILE') + " -p"), stdout=outfile)
+                p1.wait()
+                os.rename(filename, filename + "." + cstr)
+
+        #process oprofile output if available
+        if (debughelper.operfrun or (debughelper.operfglobal and self.valgrindoutfile is not '')) and os.path.exists("oprofile_data"):
+            cstr="%.3d" % (tap_writer.current_test + 1)
+            with open(self.valgrindoutfile + "." + cstr, "w") as outfile:
+                p1 = subprocess.Popen(shlex.split("opreport"), stdout=outfile)
+            p1.wait()
+            if True: #set to False if you would rather keep the original oprofile_data instead of removing it
+            #    os.unlink("oprofile_data")
+                shutil.rmtree("oprofile_data")
+            else:
+                os.rename("oprofile_data", "oprofile_data." + cstr) #use this if you want to keep the operf data instead of unlinking
+
+        #merge valgrind output if valgrind is enabled
         if debughelper.valgrindglobal and self.valgrindoutfile is not '' and os.path.exists(self.valgrindoutfile):
             vgout = open(args.memcheck,"a")
             vgrin = open(self.valgrindoutfile,"r")
@@ -777,6 +799,7 @@ class CommandRunner():
             vgrin.close()
             os.unlink(self.valgrindoutfile)
 
+        #create callgrind plots if callgrind is enabled
         if debughelper.callgrindglobal and self.valgrindoutfile is not '':
             p = subprocess.Popen(shlex.split("gprof2dot -f callgrind " + self.valgrindoutfile), stdout=subprocess.PIPE)
             subprocess.check_output(shlex.split("dot -Tpng -o " + self.valgrindoutfile + ".plot.png"), stdin=p.stdout)
@@ -907,6 +930,7 @@ class RunParallel():
     def run(self):
         for tasks in self.taskscontainer:
             for task in tasks:
+                task['type'] = 'parallel'
                 debughelper.Check(task) #check "debug:" for options, break in py-debugger if "debug: break" is in this taskblock
                 cr = CommandRunner(task, self.taskblock_name)
                 self.runners.append({"name": task['name'], "cr": cr})
@@ -921,6 +945,7 @@ class RunBackground(RunParallel): #almost the same as "parallel" except this wai
     def run(self):
         for tasks in self.taskscontainer: #separating tasks this way insures that the nested/inner loop finishes before continuing
             for task in tasks:
+                task['type'] = 'background'
                 debughelper.Check(task) #check "debug:" for options, break in py-debugger if "debug: break" is in this taskblock
                 cr = CommandRunner(task, self.taskblock_name)
                 self.runners.append({"name": task['name'], "cr": cr})
@@ -936,6 +961,7 @@ class RunSequential(RunParallel):
     def run(self):
         for tasks in self.taskscontainer:
             for task in tasks:
+                task['type'] = 'sequential'
                 debughelper.Check(task) #check "debug:" for options, break in py-debugger if "debug: break" is in this taskblock
                 cr = CommandRunner(task, self.taskblock_name)
                 cr.run()
@@ -947,6 +973,7 @@ class RunDaemon(RunParallel):
     def run(self):
         for tasks in self.taskscontainer:
             for task in tasks:
+                task['type'] = 'daemon'
                 debughelper.Check(task) #check "debug:" for options, break in py-debugger if "debug: break" is in this taskblock
                 cr = CommandRunner(task, self.taskblock_name)
                 self.runners.append({"name": task['name'], "cr": cr})
@@ -1193,6 +1220,11 @@ class DebugHelper():
         self.debugcmd = ''
         self.debugger = ''
         self.debugrun = False
+        self.delay = 0
+        self.noprof = False
+        self.noxml = False
+        self.operfglobal = False
+        self.operfrun = False
         self.show = False
         self.stdoutoption = False
         self.stderroption = False
@@ -1211,13 +1243,29 @@ class DebugHelper():
             self.valgrindglobal = True
         if args.callgrind:
             self.callgrindglobal = True
+        if args.operf:
+            import shutil
+            self.operfglobal = True
 
         self.Check(section)
     
     def Check(self, section):
+        self.debugrun = False
+        self.valgrindrun = False
+        self.operfrun = False
+        self.noprof = False
+        self.noxml = False
+        if 'comment' in section: #print out any comments made in the yaml file
+            logger.debug("*** %s ***" % section['comment'])
         if 'debug' in section and section['debug'] is not False:
             if 'COMMENT' in section['debug'] or 'comment' in section['debug']:
                 logger.debug("%s" % (section['debug']))
+            if 'noprof' in section['debug']:
+                self.noprof = True
+            if 'noxml' in section['debug']:
+                self.noxml = True
+            if 'operf' in section['debug']:
+                self.operfrun = True
             if 'show' in section['debug']:
                 self.show = True
             if 'stdout' in section['debug']:
@@ -1262,46 +1310,55 @@ class DebugHelper():
                     self.debugger = debugcmdlist.pop(0)
                     self.debugcmd = 'set breakpoint pending on\n' + ' '.join(debugcmdlist)
             else:
-                self.debugrun = False
                 if 'break' in section['debug']:
-                    pdb.set_trace() #debugger break
-        else:
-            self.debugrun = False
-            self.valgrindrun = False
-        if 'comment' in section:
-            logger.debug("*** %s ***" % section['comment'])
+                    pdb.set_trace() #python debugger break, needs to be here so python doesn't break when it sees a gdb break command
 
     def ModifyCommand(self, command, task):
         taskname=task['name']
         loopidx=0
+        self.delay=0
         self.valgrindoutfile=''
         self.callgrindoutfile=''
         c_array = shlex.split(command)
         self.commandfilename = c_array.pop(0)
         if 'loopidx' in task:
             loopidx=task['loopidx']
+        if (self.operfglobal and task['type'] is not 'daemon' and not self.noprof) or self.operfrun:
+            self.valgrindoutfile=args.operf
+            return "operf " + command
         if self.valgrindrun:
-            time.sleep(1.5) #valgrind can be a little sensitive
-            newcmd="valgrind " + self.valgrindargs + " " + command
-            return newcmd
-        elif (self.valgrindglobal or self.callgrindglobal) and loopidx < 1:
-            time.sleep(1.5) #valgrind can be a little sensitive
-            newcmd=command
-            if self.commandfilename not in self.valgrindexcludelist:                 #is this not an excluded file
-                filetype=magic.from_file(self.commandfilename)                       #get the file type
+            self.delay=0.2 #valgrind can be a little sensitive, sleep after Popen
+            return "valgrind " + self.valgrindargs + " " + command
+        elif (self.valgrindglobal and not self.noprof) or (self.callgrindglobal and loopidx < 1): #loopidx < 1 for callgrind since only one instance can run at a time
+            newcmd=command                                               #but for vg-memcheck, don't use loopidx since having mixed vg vs. non-vg creates volatility and may fail
+            if self.commandfilename not in self.valgrindexcludelist:     #is this not an excluded file
+                filetype=magic.from_file(self.commandfilename)           #get the file type
                 if 'executable' in filetype and 'ASCII' not in filetype: #check if this is a binary executable
+                    self.delay=0.2 #valgrind can be a little sensitive, sleep after Popen
                     valgrindargs=''
                     valgrindcstr="%.3d" % (self.tap_writer.current_test + 1)
                     if self.valgrindglobal:
                         if args.memcheck is 'stdout': #if valgrind is enabled, set it's output to stdout/stderr/ip:socket/file
-                            valgrindargs=self.defaultvalgrindargs + " --log-fd=1 --xml=yes --xml-fd=1"
+                            if self.noxml:            #enable/disable xml output, having xml enabled may affect stdout in some cases.
+                                valgrindargs=self.defaultvalgrindargs + " --log-fd=1"
+                                logger.debug("XML output is disabled for this test")
+                            else:
+                                valgrindargs=self.defaultvalgrindargs + " --log-fd=1 --xml=yes --xml-fd=1"
                         elif ":" in args.memcheck:
-                            valgrindargs=self.defaultvalgrindargs + " --log-socket=" + args.memcheck + " --xml=yes --xml-socket=" + int(args.memcheck) + 1
-                        elif args.memcheck is not 'stderr':              #file specified
+                            if self.noxml:
+                                valgrindargs=self.defaultvalgrindargs + " --log-socket=" + args.memcheck
+                                logger.debug("XML output is disabled for this test")
+                            else:
+                                valgrindargs=self.defaultvalgrindargs + " --log-socket=" + args.memcheck + " --xml=yes --xml-socket=" + int(args.memcheck) + 1
+                        elif args.memcheck is not 'stderr':             #file specified
                             self.valgrindoutfile=args.memcheck + "." + valgrindcstr
-                            valgrindargs=self.defaultvalgrindargs + " --log-file=" + self.valgrindoutfile + " --xml=yes --xml-file=" + self.valgrindoutfile + ".xml"
+                            if self.noxml:
+                                valgrindargs=self.defaultvalgrindargs + " --log-file=" + self.valgrindoutfile
+                                logger.debug("XML output is disabled for this test")
+                            else:
+                                valgrindargs=self.defaultvalgrindargs + " --log-file=" + self.valgrindoutfile + " --xml=yes --xml-file=" + self.valgrindoutfile + ".xml"
                             if self.valgrindcount == 0:
-                                if os.path.exists(args.memcheck):
+                                if os.path.exists(args.memcheck):       #remove any old files lying around
                                     os.unlink(args.memcheck)
                         else: #stderr
                             valgrindargs = self.defaultvalgrindargs

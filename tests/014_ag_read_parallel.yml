@@ -101,6 +101,7 @@
   type: daemon
   tasks:
     - name: start AG
+      debug: noprof #Disable profiling, it is too unreliable for this test, but enabling does work some times.
       command: $ag_path -c "$syndicate_conf" -d2 -f -u $SYNDICATE_ADMIN -v $test_volume -g $test_ag
       exit: 0
 

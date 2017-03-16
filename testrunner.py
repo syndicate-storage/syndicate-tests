@@ -43,7 +43,13 @@ global args
 global r_vars  # dict of replacement vars
 global loop_vars  # dict of arrays of vars to loop tasks on
 global debughelper  # help with debugging
+global tbr
 
+def signal_handler(signal, frame):
+    global tbr
+    print('Exiting...')
+    tbr.stop_daemons()
+    sys.exit(0)
 
 def parse_args():
 
@@ -1397,6 +1403,7 @@ if __name__ == "__main__":
     global r_vars
     global loop_vars
     global debughelper
+    global tbr
 
     loop_vars = {}
 
@@ -1414,6 +1421,8 @@ if __name__ == "__main__":
     logger.debug("Running tasks from file '%s'" % tasks_file_abspath)
 
     tbr = TaskBlocksRunner(args.tasks_file, args.tap_file)
+
+    signal.signal(signal.SIGINT, signal_handler) #handle SIGTERM properly
 
     tbr.run_task_blocks()
     tbr.stop_daemons()

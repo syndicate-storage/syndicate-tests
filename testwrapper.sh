@@ -6,6 +6,7 @@
 #   -i			interactively ask which test to run
 #   -n <test number>	run the test number specified
 #   -m                  memcheck / valgrind on all tests
+#   -o                  run with operf profiler
 #   -v                  enable verbose testrunner debug logs
 
 debug=''
@@ -64,6 +65,12 @@ if [ $testnumber -eq 0 ]; then
           python $debug ${CONFIG_ROOT}/testrunner.py $valgrindcmd -t ${OUTPUTDIR}/${testname%.*}.tmptap ${test} ${OUTPUTDIR}/${testname%.*}.tmpout
           rm ${OUTPUTDIR}/${testname%.*}.tmptap ${OUTPUTDIR}/${testname%.*}.tmpout
         fi
+        if [[ $@ =~ -o ]]; then
+          operfcmd="-o ${OUTPUTDIR}/${testname%.*}.operf"
+          echo "            : '${testname}' (operf)"
+          python $debug ${CONFIG_ROOT}/testrunner.py $operfcmd -t ${OUTPUTDIR}/${testname%.*}.tmptap ${test} ${OUTPUTDIR}/${testname%.*}.tmpout
+          rm ${OUTPUTDIR}/${testname%.*}.tmptap ${OUTPUTDIR}/${testname%.*}.tmpout
+        fi
       fi
     fi
   done
@@ -82,6 +89,12 @@ else
     valgrindcmd="-c ${OUTPUTDIR}/${testname%.*}.callgrind"
     echo "            : '${testname}' (Callgrind)"
     python $debug ${CONFIG_ROOT}/testrunner.py $valgrindcmd -t ${OUTPUTDIR}/${testname%.*}.tmptap ${test} ${OUTPUTDIR}/${testname%.*}.tmpout
+    rm ${OUTPUTDIR}/${testname%.*}.tmptap ${OUTPUTDIR}/${testname%.*}.tmpout
+  fi
+  if [[ $@ =~ -o ]]; then
+    operfcmd="-o ${OUTPUTDIR}/${testname%.*}.operf"
+    echo "            : '${testname}' (operf)"
+    python $debug ${CONFIG_ROOT}/testrunner.py $verbosedebug $operfcmd -t ${OUTPUTDIR}/${testname%.*}.tmptap ${test} ${OUTPUTDIR}/${testname%.*}.tmpout
     rm ${OUTPUTDIR}/${testname%.*}.tmptap ${OUTPUTDIR}/${testname%.*}.tmpout
   fi
 fi

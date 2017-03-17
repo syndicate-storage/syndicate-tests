@@ -1338,17 +1338,17 @@ class DebugHelper():
 		    self.valgrindoutfile=args.operf
 		    return "operf " + command
         if self.valgrindrun:
-            self.delay=0.2 #valgrind can be a little sensitive, sleep after Popen
+            self.delay=0.1 #valgrind can be a little sensitive, sleep after Popen
             return "valgrind " + self.valgrindargs + " " + command
         elif (self.valgrindglobal and not self.noprof) or (self.callgrindglobal and loopidx < 1): #loopidx < 1 for callgrind since only one instance can run at a time
             newcmd=command                                               #but for vg-memcheck, don't use loopidx since having mixed vg vs. non-vg creates volatility and may fail
             if self.commandfilename not in self.profilingexcludelist:    #is this not an excluded file
                 filetype=magic.from_file(self.commandfilename)           #get the file type
                 if 'executable' in filetype and 'ASCII' not in filetype: #check if this is a binary executable
-                    self.delay=0.2 #valgrind can be a little sensitive, sleep after Popen
                     valgrindargs=''
                     valgrindcstr="%.3d" % (self.tap_writer.current_test + 1)
                     if self.valgrindglobal:
+                        self.delay=0.1 #valgrind can be a little sensitive, sleep after Popen
                         if args.memcheck is 'stdout': #if valgrind is enabled, set it's output to stdout/stderr/ip:socket/file
                             if self.noxml:            #enable/disable xml output, having xml enabled may affect stdout in some cases.
                                 valgrindargs=self.defaultvalgrindargs + " --log-fd=1"
@@ -1374,6 +1374,7 @@ class DebugHelper():
                         else: #stderr
                             valgrindargs = self.defaultvalgrindargs
                     if self.callgrindglobal:
+                        self.delay=0.5 #callgrind may be slightly more sensitive
                         self.valgrindoutfile=args.callgrind + "." + valgrindcstr
                         valgrindargs = self.defaultcallgrindargs + " --callgrind-out-file=" + self.valgrindoutfile
                     self.valgrindcount+=1

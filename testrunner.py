@@ -1219,7 +1219,7 @@ class DebugHelper():
         #modify the following defaults
         self.defaultvalgrindargs = "--tool=memcheck --leak-check=full --num-callers=20 --track-fds=yes" #add '--show-reachable=yes' if you also want "indirectly lost" blocks, or add '--trace-children=yes' to trace sub-process/forked processes
         self.defaultcallgrindargs = "--tool=callgrind"
-        self.valgrindexcludelist=['cat','cp','diff','fstest','grep','ls','mkdir','mv','openssl','rm','sleep','test']       #exclude these binary executables when valgrindglobal is enabled
+        self.profilingexcludelist=['cat','cp','diff','fstest','grep','ls','mkdir','mv','openssl','rm','sleep','test'] #exclude these binary executables when global profling is enabled
 
         self.callgrindglobal = False
         self.commandfilename = ''
@@ -1332,7 +1332,7 @@ class DebugHelper():
         if self.operfrun:
             return "operf " + command
         elif (self.operfglobal and task['type'] is not 'daemon' and not self.noprof):
-            if self.commandfilename not in self.valgrindexcludelist:     #is this not an excluded file
+            if self.commandfilename not in self.profilingexcludelist:     #is this not an excluded file
                 filetype=magic.from_file(self.commandfilename)           #get the file type
                 if 'executable' in filetype and 'ASCII' not in filetype: #check if this is a binary executable
 		    self.valgrindoutfile=args.operf
@@ -1342,7 +1342,7 @@ class DebugHelper():
             return "valgrind " + self.valgrindargs + " " + command
         elif (self.valgrindglobal and not self.noprof) or (self.callgrindglobal and loopidx < 1): #loopidx < 1 for callgrind since only one instance can run at a time
             newcmd=command                                               #but for vg-memcheck, don't use loopidx since having mixed vg vs. non-vg creates volatility and may fail
-            if self.commandfilename not in self.valgrindexcludelist:     #is this not an excluded file
+            if self.commandfilename not in self.profilingexcludelist:    #is this not an excluded file
                 filetype=magic.from_file(self.commandfilename)           #get the file type
                 if 'executable' in filetype and 'ASCII' not in filetype: #check if this is a binary executable
                     self.delay=0.2 #valgrind can be a little sensitive, sleep after Popen

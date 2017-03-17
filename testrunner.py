@@ -1329,9 +1329,14 @@ class DebugHelper():
         self.commandfilename = c_array.pop(0)
         if 'loopidx' in task:
             loopidx=task['loopidx']
-        if (self.operfglobal and task['type'] is not 'daemon' and not self.noprof) or self.operfrun:
-            self.valgrindoutfile=args.operf
+        if self.operfrun:
             return "operf " + command
+        elif (self.operfglobal and task['type'] is not 'daemon' and not self.noprof):
+            if self.commandfilename not in self.valgrindexcludelist:     #is this not an excluded file
+                filetype=magic.from_file(self.commandfilename)           #get the file type
+                if 'executable' in filetype and 'ASCII' not in filetype: #check if this is a binary executable
+		    self.valgrindoutfile=args.operf
+		    return "operf " + command
         if self.valgrindrun:
             self.delay=0.2 #valgrind can be a little sensitive, sleep after Popen
             return "valgrind " + self.valgrindargs + " " + command
@@ -1382,8 +1387,7 @@ class DebugHelper():
             gdbf.write(' '.join(c_array)) #gdb/ddd loads a command file before running, if specified
             logger.debug("Debugger will run:\n%s\n%s" % (self.debugcmd, ' '.join(c_array)))
             return ' '.join(newcmd)
-        else:
-            return command
+        return command
 
     def stdErr(self, string):
         if self.stderroption:

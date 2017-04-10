@@ -313,7 +313,8 @@ class CommandRunner():
         self.start_t = None
         self.end_t = None
         self.valgrindoutfile = ''
-        self.timeout = 180 
+        self.defaulttimeout = 180
+        self.timeout = self.defaulttimeout
 
         self.taskb_name = taskb_name
         self.q = collections.deque()
@@ -382,6 +383,11 @@ class CommandRunner():
             else:
                 logger.error("infile '%s' is not a file" % in_fname)
                 sys.exit(1)
+
+        if "timeout" in self.task:
+            self.timeout = self.task["timeout"]
+        else:
+            self.timeout = self.defaulttimeout
 
         debughelper.Check(self.task)
         command = debughelper.ModifyCommand(command, self.task)

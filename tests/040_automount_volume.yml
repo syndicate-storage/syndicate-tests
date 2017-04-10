@@ -1,0 +1,87 @@
+---
+
+- name: automount volume
+  type: setup
+  tmpdirs:
+    - name: 040_automount_volume_server
+      varname: config_dir_server
+    - name: 040_automount_volume_client
+      varname: config_dir_client
+  randnames:
+    - test_volume
+  vars:
+    - name: syndicate_conf_server
+      value: $config_dir_server/syndicate.conf
+    - name: syndicate_conf_client
+      value: $config_dir_client/syndicate.conf
+    - name: instance_id
+      value: "1000"
+    - name: test_volume_instance
+      value: ${instance_id}.${test_volume}
+    - name: provision_file
+      value: $config_dir_server/automount_provision_file.json
+    - name: test_rg
+      value: ${test_volume_instance}-RG-docker-synclient1
+    - name: rg_path
+      value: $SYNDICATE_RG_ROOT/syndicate-rg
+    - name: rg_driver
+      value: $SYNDICATE_PYTHON_ROOT/syndicate/rg/drivers/disk
+
+- name: configure automount server
+  type: sequential
+  tasks:
+
+    - name: setup syndicate security config for server
+      command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf_server" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS" 
+
+    - name: autofill automount server config
+      command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf_server" amd_server_setup autofill
+
+    - name: add test volume config
+      command: $SYNDICATE_TOOL -c "$syndicate_conf_server" create_volume name=$test_volume_instance description="testvolume" blocksize=4096 email=$SYNDICATE_ADMIN
+
+    - name: setup RG config
+      command: $SYNDICATE_TOOL -c "$syndicate_conf_server" create_gateway name=$test_rg type=RG volume=$test_volume_instance email=$SYNDICATE_ADMIN private_key=auto port=31112
+
+    - name: update RG config
+      command: $SYNDICATE_TOOL -c "$syndicate_conf_server" update_gateway name=$test_rg caps=ALL port=31112 driver=$rg_driver
+
+    - name: copy the ms public key as test-poll-server-pubkey.pub to allow poll_server_pubkey to work
+      command: cp "$config_dir_server/syndicate/ms:28080.pub" /tmp/test-poll-server-pubkey.pub
+
+- name: configure automount client
+  type: sequential
+  tasks:
+
+    - name: setup syndicate security config for client
+      command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf_client" --debug setup "$SYNDICATE_ADMIN" "$SYNDICATE_PRIVKEY_PATH" "$SYNDICATE_MS" 
+
+    - name: autofill automount client config
+      command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf_client" amd_client_setup autofill
+    
+    - name: fix the syndicate.conf file to use a known instance id
+      command: sed -i "s/instance_id.*/instance_id = $instance_id/g" $config_dir_client/syndicate.conf
+
+    - name: copy the ms public key as test-poll-server-pubkey.pub to allow poll_hosts_pubkey to work
+      command: cp /tmp/test-poll-server-pubkey.pub /tmp/test-poll-host-pubkey.pub
+
+- name: create provision file
+  type: sequential
+  tasks:
+    - name: make a simplified provision file
+      command: $tasksf_dir/create_prov.sh $SYNDICATE_ADMIN $test_volume_instance "testvolume" 4096 RG 31112 docker-synclient1 $provision_file
+
+- name: start the automount server
+  type: daemon
+  tasks:
+    - name: start syndicate-amd-server
+      timeout: 17 #exit in 17 seconds, use this until I create a safe exit option in syndicate-amd-server
+      command: /usr/bin/syndicate-amd-server server $provision_file -d -f -c "$syndicate_conf_server"
+      sleep: 5    #sleep for 5 seconds
+
+- name: start the automount client test
+  type: sequential
+  tasks:
+    - name: begin syndicate-amd client test
+      timeout: 12 #exit in 12 seconds
+      command: /usr/bin/syndicate-amd reprovision -d -H http://localhost:33334 -f -c "$syndicate_conf_client"

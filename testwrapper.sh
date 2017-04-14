@@ -47,29 +47,29 @@ if [ $testnumber -eq 0 ]; then
          runtest=1
       fi
     fi
-    valgrindcmd=''
-    valgrindmsg=''
-    if [[ $@ =~ -m ]]; then
-      valgrindcmd="-m ${OUTPUTDIR}/${testname%.*}.valgrind"
-      valgrindmsg=" (Memcheck)"
-    fi
     if [ $runtest == 1 ]; then
       if [[ -n `cat $test | grep "debug:.*disable"` ]]; then
         echo "Skipping test: '${testname}' (disabled)"
       else
-        echo "Running test: '${testname}'${valgrindmsg}"
-        python $debug ${CONFIG_ROOT}/testrunner.py $verbosedebug $valgrindcmd -t ${RESULTDIR}/${testname%.*}.tap ${test} ${OUTPUTDIR}/${testname%.*}.out
+        printf "Running test: '${testname}'"
         if [[ $@ =~ -c ]]; then
           valgrindcmd="-c ${OUTPUTDIR}/${testname%.*}.callgrind"
-          echo "            : '${testname}' (Callgrind)"
-          python $debug ${CONFIG_ROOT}/testrunner.py $valgrindcmd -t ${OUTPUTDIR}/${testname%.*}.tmptap ${test} ${OUTPUTDIR}/${testname%.*}.tmpout
-          rm ${OUTPUTDIR}/${testname%.*}.tmptap ${OUTPUTDIR}/${testname%.*}.tmpout
+          echo " (Callgrind)"
+          python $debug ${CONFIG_ROOT}/testrunner.py $valgrindcmd -t /tmp/${testname%.*}.tap ${test} /tmp/${testname%.*}.out
+          rm /tmp/${testname%.*}.tap /tmp/${testname%.*}.out*
+          printf "            : '${testname}'"
         fi
+        valgrindcmd=''
+        if [[ $@ =~ -m ]]; then
+          valgrindcmd="-m ${OUTPUTDIR}/${testname%.*}.valgrind"
+          echo " (Memcheck)"
+        fi
+        python $debug ${CONFIG_ROOT}/testrunner.py $verbosedebug $valgrindcmd -t ${RESULTDIR}/${testname%.*}.tap ${test} ${OUTPUTDIR}/${testname%.*}.out
         if [[ $@ =~ -o ]]; then
           operfcmd="-o ${OUTPUTDIR}/${testname%.*}.operf"
           echo "            : '${testname}' (operf)"
-          python $debug ${CONFIG_ROOT}/testrunner.py $operfcmd -t ${OUTPUTDIR}/${testname%.*}.tmptap ${test} ${OUTPUTDIR}/${testname%.*}.tmpout
-          rm ${OUTPUTDIR}/${testname%.*}.tmptap ${OUTPUTDIR}/${testname%.*}.tmpout
+          python $debug ${CONFIG_ROOT}/testrunner.py $operfcmd -t /tmp/${testname%.*}.tap ${test} /tmp/${testname%.*}.out
+          rm /tmp/${testname%.*}.tap /tmp/${testname%.*}.out*
         fi
       fi
     fi
@@ -77,25 +77,25 @@ if [ $testnumber -eq 0 ]; then
 else
   test=`find ${TESTDIR} -name "*${testnumber}_*.yml"`
   testname=${test##*/}
-  valgrindcmd=''
-  valgrindmsg=''
-  if [[ $@ =~ -m ]]; then
-    valgrindcmd="-m ${OUTPUTDIR}/${testname%.*}.valgrind"
-    valgrindmsg=" (Memcheck)"
-  fi
-  echo "Running test: '${testname}'${valgrindmsg}"
-  python $debug ${CONFIG_ROOT}/testrunner.py $verbosedebug $valgrindcmd -t ${RESULTDIR}/${testname%.*}.tap ${test} ${OUTPUTDIR}/${testname%.*}.out
+  printf "Running test: '${testname}'"
   if [[ $@ =~ -c ]]; then
     valgrindcmd="-c ${OUTPUTDIR}/${testname%.*}.callgrind"
-    echo "            : '${testname}' (Callgrind)"
-    python $debug ${CONFIG_ROOT}/testrunner.py $valgrindcmd -t ${OUTPUTDIR}/${testname%.*}.tmptap ${test} ${OUTPUTDIR}/${testname%.*}.tmpout
-    rm ${OUTPUTDIR}/${testname%.*}.tmptap ${OUTPUTDIR}/${testname%.*}.tmpout
+    echo " (Callgrind)"
+    python ${CONFIG_ROOT}/testrunner.py $valgrindcmd -t /tmp/${testname%.*}.tap ${test} /tmp/${testname%.*}.out
+    rm /tmp/${testname%.*}.tap /tmp/${testname%.*}.out*
+    printf "            : '${testname}'"
   fi
+  valgrindcmd=''
+  if [[ $@ =~ -m ]]; then
+    valgrindcmd="-m ${OUTPUTDIR}/${testname%.*}.valgrind"
+    echo " (Memcheck)"
+  fi
+  python $debug ${CONFIG_ROOT}/testrunner.py $verbosedebug $valgrindcmd -t ${RESULTDIR}/${testname%.*}.tap ${test} ${OUTPUTDIR}/${testname%.*}.out
   if [[ $@ =~ -o ]]; then
     operfcmd="-o ${OUTPUTDIR}/${testname%.*}.operf"
     echo "            : '${testname}' (operf)"
-    python $debug ${CONFIG_ROOT}/testrunner.py $verbosedebug $operfcmd -t ${OUTPUTDIR}/${testname%.*}.tmptap ${test} ${OUTPUTDIR}/${testname%.*}.tmpout
-    rm ${OUTPUTDIR}/${testname%.*}.tmptap ${OUTPUTDIR}/${testname%.*}.tmpout
+    python $debug ${CONFIG_ROOT}/testrunner.py $verbosedebug $operfcmd -t /tmp/${testname%.*}.tap ${test} /tmp/${testname%.*}.out
+    rm /tmp/${testname%.*}.tap /tmp/${testname%.*}.out*
   fi
 fi
 

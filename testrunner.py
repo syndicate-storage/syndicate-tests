@@ -531,6 +531,12 @@ class CommandRunner():
                          (self.task['name'], retcode, exit))
             logger.error(exit_fail)
             failures.append(exit_fail)
+       
+        outputfilenamepath=((("%s" % args.output_file).split(",")[0]).split()[2]).replace("'","")
+        testfilenamepath="%s.%.3d.txt" % (outputfilenamepath, tap_writer.current_test + 1)
+        outfile = open(testfilenamepath, 'w')
+        outfile.write("Task '%s': `%s`\n" % (self.task['name'], self.task['repl_command']))
+        outflag=False
 
         stdout_str = ""
         stderr_str = ""
@@ -539,11 +545,19 @@ class CommandRunner():
             if dq_item['stream'] == "o":
                 stdout_str += dq_item['line']
                 debughelper.stdOut("  STDOUT: %s" % dq_item['line'].rstrip())
+                outfile.write("  STDOUT: %s" % stdout_str)
+                outflag=True
             elif dq_item['stream'] == "e":
                 stderr_str += dq_item['line']
                 debughelper.stdErr("  STDERR: %s" % dq_item['line'].rstrip())
+                outfile.write("  STDERR: %s" % stderr_str)
+                outflag=True
             else:
                 raise Exception("Unknown stream: %s" % dq_item['stream'])
+
+        outfile.close()
+        if not outflag and os.path.exists(testfilenamepath):
+            os.unlink(testfilenamepath)
 
         # saving stdout/stderr is optional
         if 'saveout' in self.task:
@@ -758,19 +772,6 @@ class CommandRunner():
                 logger.debug("Task '%s' stderr was: '%s'" %
                             (self.task['name'], stderr_str))
 
-        if tap_writer:
-
-            if not debughelper.debugrun:
-                yaml_data = {"duration_ms": "%.6f" % self.duration(1000),
-                             "command": self.task['repl_command']}
-                testname = "%s : %s" % (self.taskb_name, self.task['name'])
-
-                if failures:
-                    yaml_data["failures"] = failures
-                    tap_writer.record_test(False, testname, yaml_data)
-                else:
-                    tap_writer.record_test(True, testname, yaml_data)
-
         #process gprof files if they are created
         if os.path.exists("gmon.out"):
             cstr="%.3d" % (tap_writer.current_test + 1)
@@ -815,9 +816,42 @@ class CommandRunner():
 
         #create callgrind plots if callgrind is enabled
         if debughelper.callgrindglobal and self.valgrindoutfile is not '':
+            plotfile=self.valgrindoutfile + ".plot.png"
             p = subprocess.Popen(shlex.split("gprof2dot -f callgrind " + self.valgrindoutfile), stdout=subprocess.PIPE)
-            subprocess.check_output(shlex.split("dot -Tpng -o " + self.valgrindoutfile + ".plot.png"), stdin=p.stdout)
+            subprocess.check_output(shlex.split("dot -Tpng -o " + plotfile), stdin=p.stdout)
+            #save filenames in a list that can be read later
+            plotfilelist=open("/tmp/" + tap_writer.tap_filename.split("/")[-1] + ".cglist",'a')
+            plotfilelist.write(plotfile + "\n")
+            plotfilelist.close()
             p.wait()
+
+        if tap_writer:
+
+            if not debughelper.debugrun:
+                yaml_data = {"duration_ms": "%.6f" % self.duration(1000),
+                             "command": self.task['repl_command']}
+
+                if outflag and os.environ.has_key("BUILD_URL"):
+                    testfilename=testfilenamepath.split("/")[-1]
+                    yaml_data['output']="%s/artifact/output/%s" % (os.environ.get("BUILD_URL",''),testfilename)
+
+                #add callgraph link from previous callgrind run
+                if not debughelper.callgrindglobal and os.path.exists("/tmp/" + tap_writer.tap_filename.split("/")[-1] + ".cglist"):
+                    plotfilelist=open("/tmp/" + tap_writer.tap_filename.split("/")[-1] + ".cglist",'r')
+                    searchstring="%.3d" % (tap_writer.current_test + 1)
+                    for line in plotfilelist:
+                        if searchstring in line:
+                            if os.path.exists(line.rstrip()):
+                                vgoutfile=(line.split("/")[-1]).rstrip()
+                                yaml_data['call graph']="%s/artifact/output/%s" % (os.environ.get("BUILD_URL",''),vgoutfile)
+
+                testname = "%s : %s" % (self.taskb_name, self.task['name'])
+
+                if failures:
+                    yaml_data["failures"] = failures
+                    tap_writer.record_test(False, testname, yaml_data)
+                else:
+                    tap_writer.record_test(True, testname, yaml_data)
 
         return {"failures": failures, "q": self.q}
 
@@ -1007,6 +1041,7 @@ class TAPWriter():
         """
 
         self.current_test = 0
+        self.tap_filename = tap_filename
 
         self.tap_file = open(tap_filename, 'w')
 

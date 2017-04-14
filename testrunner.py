@@ -487,7 +487,7 @@ class CommandRunner():
 
         failures = []
 
-        if os.name == 'posix' and sys.version_info[0] < 3:
+        if os.name == 'posix' and sys.version_info[0] < 3 and not debughelper.debugrun:
             try:
                 self.p.wait(self.timeout)
             except subprocess.TimeoutExpired:
@@ -504,6 +504,8 @@ class CommandRunner():
         if not debughelper.debugrun:
             logger.debug("Duration of task '%s': %.6f" %
                      (self.task['name'], self.duration()))
+        elif os.path.exists("debug.cmd"):
+            os.unlink("debug.cmd")
 
         # $task_name is name of current task
         r_vars['task_name'] = self.task['name']

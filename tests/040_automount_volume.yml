@@ -60,7 +60,7 @@
       command: $SYNDICATE_TOOL --trust_public_key -c "$syndicate_conf_client" amd_client_setup autofill
     
     - name: fix the syndicate.conf file to use a known instance id
-      command: sed -i "s/instance_id.*/instance_id = $instance_id/g" $config_dir_client/syndicate.conf
+      command: /bin/sed -i "s/instance_id.*/instance_id = $instance_id/g" $config_dir_client/syndicate.conf
 
     - name: copy the ms public key as test-poll-server-pubkey.pub to allow poll_hosts_pubkey to work
       command: cp /tmp/test-poll-server-pubkey.pub /tmp/test-poll-host-pubkey.pub

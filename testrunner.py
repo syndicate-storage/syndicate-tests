@@ -545,12 +545,12 @@ class CommandRunner():
             if dq_item['stream'] == "o":
                 stdout_str += dq_item['line']
                 debughelper.stdOut("  STDOUT: %s" % dq_item['line'].rstrip())
-                outfile.write("  STDOUT: %s" % stdout_str)
+                outfile.write("  STDOUT: %s" % dq_item['line'])
                 outflag=True
             elif dq_item['stream'] == "e":
                 stderr_str += dq_item['line']
                 debughelper.stdErr("  STDERR: %s" % dq_item['line'].rstrip())
-                outfile.write("  STDERR: %s" % stderr_str)
+                outfile.write("  STDERR: %s" % dq_item['line'])
                 outflag=True
             else:
                 raise Exception("Unknown stream: %s" % dq_item['stream'])
@@ -840,7 +840,7 @@ class CommandRunner():
                     plotfilelist=open("/tmp/" + tap_writer.tap_filename.split("/")[-1] + ".cglist",'r')
                     searchstring="%.3d" % (tap_writer.current_test + 1)
                     for line in plotfilelist:
-                        if searchstring in line:
+                        if ".%s." % searchstring in line:
                             if os.path.exists(line.rstrip()):
                                 vgoutfile=(line.split("/")[-1]).rstrip()
                                 yaml_data['call graph']="%s/artifact/output/%s" % (os.environ.get("BUILD_URL",''),vgoutfile)

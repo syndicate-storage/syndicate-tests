@@ -91,6 +91,7 @@ else
     echo " (Memcheck)"
   fi
   python $debug ${CONFIG_ROOT}/testrunner.py $verbosedebug $valgrindcmd -t ${RESULTDIR}/${testname%.*}.tap ${test} ${OUTPUTDIR}/${testname%.*}.out
+  rm /tmp/*.cglist
   if [[ $@ =~ -o ]]; then
     operfcmd="-o ${OUTPUTDIR}/${testname%.*}.operf"
     echo "            : '${testname}' (operf)"

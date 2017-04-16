@@ -65,6 +65,10 @@ def parse_args():
                         type=argparse.FileType('w'),
                         help="muxed output/error filename")
 
+    parser.add_argument('-b', '--buildurl',
+                        default=False,
+                        help="define the build url")
+
     parser.add_argument('-c', '--callgrind',
                         default=False,
                         help="run valgrind callgrind, specify output file")
@@ -305,6 +309,7 @@ class CommandRunner():
 
     def __init__(self, task, taskb_name):
 
+        self.buildurl = None
         self.task = {}
         self.p = None
         self.run_in_shell = False
@@ -320,6 +325,11 @@ class CommandRunner():
         self.q = collections.deque()
 
         self.task = task
+
+        if args.buildurl:
+            self.buildurl = args.buildurl
+        elif os.environ.has_key("BUILD_URL"):
+            self.buildurl = os.environ.get("BUILD_URL",'')
 
         if "shell" in task:
             self.run_in_shell = True
@@ -831,9 +841,9 @@ class CommandRunner():
                 yaml_data = {"duration_ms": "%.6f" % self.duration(1000),
                              "command": self.task['repl_command']}
 
-                if outflag and os.environ.has_key("BUILD_URL"):
+                if outflag and self.buildurl is not None:
                     testfilename=testfilenamepath.split("/")[-1]
-                    yaml_data['output']="%s/artifact/output/%s" % (os.environ.get("BUILD_URL",''),testfilename)
+                    yaml_data['output']="%sartifact/output/%s" % (self.buildurl,testfilename)
 
                 #add callgraph link from previous callgrind run
                 if not debughelper.callgrindglobal and os.path.exists("/tmp/" + tap_writer.tap_filename.split("/")[-1] + ".cglist"):
@@ -843,7 +853,7 @@ class CommandRunner():
                         if ".%s." % searchstring in line:
                             if os.path.exists(line.rstrip()):
                                 vgoutfile=(line.split("/")[-1]).rstrip()
-                                yaml_data['call graph']="%s/artifact/output/%s" % (os.environ.get("BUILD_URL",''),vgoutfile)
+                                yaml_data['call graph']="%sartifact/output/%s" % (self.buildurl,vgoutfile)
 
                 testname = "%s : %s" % (self.taskb_name, self.task['name'])
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Runs syndicate tests in PATHDIR, puts TAP results in TESTDIR
 # Syntax:
+#   -b <build url>      populate tap results with url info
 #   -c                  callgrind on all tests
 #   -d 			run with python debugger
 #   -i			interactively ask which test to run
@@ -8,6 +9,11 @@
 #   -m                  memcheck / valgrind on all tests
 #   -o                  run with operf profiler
 #   -v                  enable verbose testrunner debug logs
+
+buildurl=''
+if [[ $@ =~ -b ]]; then
+  buildurl=`echo $@ | sed -e 's/^.*-b //g' | awk '{ print "-b " $1 }'`
+fi
 
 debug=''
 if [[ $@ =~ -d ]]; then
@@ -64,7 +70,7 @@ if [ $testnumber -eq 0 ]; then
           valgrindcmd="-m ${OUTPUTDIR}/${testname%.*}.valgrind"
           echo " (Memcheck)"
         fi
-        python $debug ${CONFIG_ROOT}/testrunner.py $verbosedebug $valgrindcmd -t ${RESULTDIR}/${testname%.*}.tap ${test} ${OUTPUTDIR}/${testname%.*}.out
+        python $debug ${CONFIG_ROOT}/testrunner.py $verbosedebug $valgrindcmd $buildurl -t ${RESULTDIR}/${testname%.*}.tap ${test} ${OUTPUTDIR}/${testname%.*}.out
         if [[ $@ =~ -o ]]; then
           operfcmd="-o ${OUTPUTDIR}/${testname%.*}.operf"
           echo "            : '${testname}' (operf)"

@@ -1,4 +1,5 @@
 #!/bin/bash
+#create a simple provision file and copy the ms:XXXXX.pub file to /tmp/test-poll-X-pubkey.pub files
 
 USERNAME=$1
 VOLUMENAME=$2
@@ -48,3 +49,8 @@ cat <<'EOF' | sed -e s/USERNAME/$USERNAME/g -e s/VOLUMENAME/$VOLUMENAME/g -e s/V
    }
 }
 EOF
+
+pubfilepath=`dirname $OUTPUTFILE`
+pubfile=`find ${pubfilepath} -name "*.pub" | head -1`
+cp -f "$pubfile" /tmp/test-poll-server-pubkey.pub
+cp -f /tmp/test-poll-server-pubkey.pub /tmp/test-poll-host-pubkey.pub

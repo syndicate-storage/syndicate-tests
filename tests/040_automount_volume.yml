@@ -46,9 +46,6 @@
     - name: update RG config
       command: $SYNDICATE_TOOL -c "$syndicate_conf_server" update_gateway name=$test_rg caps=ALL port=31112 driver=$rg_driver
 
-    - name: copy the ms public key as test-poll-server-pubkey.pub to allow poll_server_pubkey to work
-      command: /bin/cp "$config_dir_server/syndicate/ms:28080.pub" /tmp/test-poll-server-pubkey.pub
-
 - name: configure automount client
   type: sequential
   tasks:
@@ -62,13 +59,10 @@
     - name: fix the syndicate.conf file to use a known instance id
       command: /bin/sed -i "s/instance_id.*/instance_id = $instance_id/g" $config_dir_client/syndicate.conf
 
-    - name: copy the ms public key as test-poll-server-pubkey.pub to allow poll_hosts_pubkey to work
-      command: /bin/cp /tmp/test-poll-server-pubkey.pub /tmp/test-poll-host-pubkey.pub
-
 - name: create provision file
   type: sequential
   tasks:
-    - name: make a simplified provision file
+    - name: make a simplified provision file and copy ms:XXXXX.pub file to /tmp/test-poll-X-pubkey.pub files
       command: $tasksf_dir/create_prov.sh $SYNDICATE_ADMIN $test_volume_instance "testvolume" 4096 RG 31112 docker-synclient1 $provision_file
 
 - name: start the automount server

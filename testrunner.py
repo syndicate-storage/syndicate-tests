@@ -682,7 +682,7 @@ class CommandRunner():
         if 'compareout' in self.task:
             cout_rv = replace_vars(str(self.task['compareout']))
             expectthis = True
-            if cout_rv[0] == '!': #if str starts with '!', fails if str == stdout
+            if len(cout_rv) > 0 and cout_rv[0] == '!': #if str starts with '!', fails if str == stdout
                 cout_rv = cout_rv[1:] #remove the '!', then compare
                 expectthis = False
             if cout_rv == stdout_str.rstrip():
@@ -703,7 +703,7 @@ class CommandRunner():
         if 'compareerr' in self.task:
             cerr_rv = replace_vars(str(self.task['compareerr']))
             expectthis = True
-            if cerr_rv[0] == '!': #if str starts with '!', fails if str == stderr
+            if len(cerr_rv) > 0 and cerr_rv[0] == '!': #if str starts with '!', fails if str == stderr
                 cerr_rv = cerr_rv[1:] #remove the '!', then compare
                 expectthis = False
             if cerr_rv == stderr_str.rstrip():

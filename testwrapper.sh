@@ -69,6 +69,8 @@ if [ $testnumber -eq 0 ]; then
         if [[ $@ =~ -m ]]; then
           valgrindcmd="-m ${OUTPUTDIR}/${testname%.*}.valgrind"
           echo " (Memcheck)"
+        else
+          echo ""
         fi
         python $debug ${CONFIG_ROOT}/testrunner.py $verbosedebug $valgrindcmd $buildurl -t ${RESULTDIR}/${testname%.*}.tap ${test} ${OUTPUTDIR}/${testname%.*}.out
         if [[ $@ =~ -o ]]; then
@@ -81,7 +83,7 @@ if [ $testnumber -eq 0 ]; then
     fi
   done
 else
-  test=`find ${TESTDIR} -name "*${testnumber}_*.yml"`
+  test=`find ${TESTDIR} -name "*${testnumber}_*.yml" | grep -v notsupported`
   testname=${test##*/}
   printf "Running test: '${testname}'"
   if [[ $@ =~ -c ]]; then
@@ -95,9 +97,13 @@ else
   if [[ $@ =~ -m ]]; then
     valgrindcmd="-m ${OUTPUTDIR}/${testname%.*}.valgrind"
     echo " (Memcheck)"
+  else
+    echo ""
   fi
   python $debug ${CONFIG_ROOT}/testrunner.py $verbosedebug $valgrindcmd -t ${RESULTDIR}/${testname%.*}.tap ${test} ${OUTPUTDIR}/${testname%.*}.out
-  rm /tmp/*.cglist
+  if [ -n "`ls /tmp/*.cglist 2>/dev/null`" ]; then
+    rm /tmp/*.cglist
+  fi
   if [[ $@ =~ -o ]]; then
     operfcmd="-o ${OUTPUTDIR}/${testname%.*}.operf"
     echo "            : '${testname}' (operf)"

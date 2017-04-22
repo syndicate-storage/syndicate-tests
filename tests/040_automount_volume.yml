@@ -21,7 +21,7 @@
     - name: provision_file
       value: $config_dir_server/automount_provision_file.json
     - name: test_rg
-      value: ${test_volume_instance}-RG-docker-synclient1
+      value: ${test_volume_instance}-RG-${HOSTNAME}
     - name: rg_path
       value: $SYNDICATE_RG_ROOT/syndicate-rg
     - name: rg_driver
@@ -63,7 +63,7 @@
   type: sequential
   tasks:
     - name: make a simplified provision file and copy ms:XXXXX.pub file to /tmp/test-poll-X-pubkey.pub files
-      command: $tasksf_dir/create_prov.sh $SYNDICATE_ADMIN $test_volume_instance "testvolume" 4096 RG 31112 docker-synclient1 $provision_file
+      command: $tasksf_dir/create_prov.sh $SYNDICATE_ADMIN $test_volume_instance "testvolume" 4096 RG 31112 $HOSTNAME $provision_file
 
 - name: start the automount server
   type: daemon

@@ -16,6 +16,7 @@ import random
 import re
 import shlex
 import signal
+import socket
 import sys
 import tempfile
 import threading
@@ -108,6 +109,7 @@ def import_env():
     r_vars = {}
 
     env_var_names = [
+        "HOSTNAME",
         "SYNDICATE_ADMIN",
         "SYNDICATE_MS",
         "SYNDICATE_MS_ROOT",
@@ -124,9 +126,13 @@ def import_env():
     logger.debug("Environmental Vars:")
 
     for e_key in env_var_names:
-        r_vars[e_key] = os.environ[e_key]
-        logger.debug(" %s=%s" % (e_key, r_vars[e_key]))
-
+        if os.environ.has_key(e_key):
+            r_vars[e_key] = os.environ[e_key]
+            logger.debug(" %s=%s" % (e_key, r_vars[e_key]))
+        elif e_key is 'HOSTNAME': #get hostname if it is not defined
+            r_vars[e_key] = socket.gethostname()
+        else:                     #log if env variables are missing
+            logger.error("Missing environment variable: %s" % e_key)
 
 def tmpdir(name, varname=None, mode=0700):
 
@@ -245,8 +251,7 @@ def replace_vars(string):
             riv = re.compile('%s\[\$?(\S+)\]' % match)
             idxvar = riv.findall(string)
             if not idxvar:
-                logger.error("Improper syntax for array: '$%s' in '%s'" %
-                            (match, string))
+                logger.error("Improper syntax for array: '$%s' in '%s'" % (match, string))
             elif idxvar[0].isdigit(): #a hard coded index was set, i.e. $a[0]
                 idx = int(idxvar[0])
             else:                     #an index variable was used, i.e. $a[$i]

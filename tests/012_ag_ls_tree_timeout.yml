@@ -35,8 +35,6 @@
       value: $SYNDICATE_AG_ROOT/syndicate-ag
     - name: ls_path
       value: $SYNDICATE_UG_ROOT/syndicate-ls
-    - name: unlink_path
-      value: $SYNDICATE_UG_ROOT/syndicate-unlink
   debug: off
 
 - name: create ag dataset
@@ -109,14 +107,5 @@
 - name: clean up
   type: sequential
   tasks:
-    - name: unlink each file
-      command: $unlink_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $cat_ug $lsloop[2]
-
-    - name: unlink each file
-      command: $unlink_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $cat_ug $lsloop[1]
-    
-    - name: unlink each file
-      command: $unlink_path -d2 -f -c "$syndicate_conf" -u $SYNDICATE_ADMIN -v $test_volume -g $cat_ug $lsloop[0]
-
     - name: delete volume
       command: $SYNDICATE_TOOL -c "$syndicate_conf" delete_volume "$test_volume"

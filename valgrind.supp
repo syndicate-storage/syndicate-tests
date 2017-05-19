@@ -1,0 +1,226 @@
+{
+   OpenSSL:md_load_privkey leak
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:CRYPTO_malloc
+   fun:RSA_new_method
+   obj:/lib/x86_64-linux-gnu/libcrypto.so.1.0.0
+   obj:/lib/x86_64-linux-gnu/libcrypto.so.1.0.0
+   fun:ASN1_item_ex_d2i
+   fun:ASN1_item_d2i
+   obj:/lib/x86_64-linux-gnu/libcrypto.so.1.0.0
+   fun:d2i_PrivateKey
+   fun:PEM_read_bio_PrivateKey
+   fun:md_load_privkey
+}
+
+{
+   Opts.cpp:md_opts_default strdup leak
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:strdup
+   fun:md_opts_default
+}
+
+{
+   Uninitialized variabled (stanza) in crawl.cpp:226
+   Memcheck:Cond
+   fun:vfprintf
+   fun:buffered_vfprintf
+   fun:vfprintf
+   fun:fprintf
+   fun:_ZL23AG_stanza_linebuf_setupiP9AG_stanza
+   fun:_ZL20AG_crawl_read_stanzaiP9AG_stanza
+   fun:AG_crawl_consume_stanzas
+   fun:_ZL13AG_crawl_loopPv
+   fun:start_thread
+   fun:clone
+}
+
+{
+   Uninitialized variabled (stanza) in crawl.cpp:226
+   Memcheck:Value8
+   fun:_itoa_word
+   fun:vfprintf
+   fun:buffered_vfprintf
+   fun:vfprintf
+   fun:fprintf
+   fun:_ZL23AG_stanza_linebuf_setupiP9AG_stanza
+   fun:_ZL20AG_crawl_read_stanzaiP9AG_stanza
+   fun:AG_crawl_consume_stanzas
+   fun:_ZL13AG_crawl_loopPv
+   fun:start_thread
+   fun:clone
+}
+
+{
+   Uninitialized variabled (stanza) in crawl.cpp:226
+   Memcheck:Cond
+   fun:_itoa_word
+   fun:vfprintf
+   fun:buffered_vfprintf
+   fun:vfprintf
+   fun:fprintf
+   fun:_ZL23AG_stanza_linebuf_setupiP9AG_stanza
+   fun:_ZL20AG_crawl_read_stanzaiP9AG_stanza
+   fun:AG_crawl_consume_stanzas
+   fun:_ZL13AG_crawl_loopPv
+   fun:start_thread
+   fun:clone
+}
+
+{
+   Reported memory leak in libprotobuf
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:_Znwm
+   fun:_ZNSs4_Rep9_S_createEmmRKSaIcE
+   fun:_ZNSs4_Rep8_M_cloneERKSaIcEm
+   fun:_ZNSsC1ERKSs
+}
+
+{
+   Reported memory leak in libprotobuf
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:_Znwm
+   fun:_ZNSs4_Rep9_S_createEmmRKSaIcE
+   fun:_ZNSs12_S_constructIPKcEEPcT_S3_RKSaIcESt20forward_iterator_tag
+   fun:_ZNSsC1EPKcRKSaIcE
+   obj:/usr/lib/x86_64-linux-gnu/libprotobuf.so.8.0.0
+   fun:call_init.part.0
+   fun:call_init
+   fun:_dl_init
+   obj:/lib/x86_64-linux-gnu/ld-2.19.so
+}
+
+{
+   Possible memory leak from md_HTTP_post_field_handler server.cpp:3047 in STL function, appears okay
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:_Znwm
+   fun:_ZNSs4_Rep9_S_createEmmRKSaIcE
+   fun:_ZNSs12_S_constructIPKcEEPcT_S3_RKSaIcESt20forward_iterator_tag
+   fun:_ZNSsC1EPKcRKSaIcE
+   fun:SG_server_HTTP_install_handlers
+   fun:SG_gateway_init_opts
+   fun:SG_gateway_init
+   fun:UG_init_ex
+   fun:UG_init
+   fun:main
+}
+
+{
+   Reported memory leak in libprotobuf, from md_parse in libsyndicate.h:405, inspected and looks okay
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:_Znwm
+   fun:_ZNSs4_Rep9_S_createEmmRKSaIcE
+   fun:_ZNSs4_Rep8_M_cloneERKSaIcEm
+   fun:_ZNSs7reserveEm
+}
+
+{
+   Reported leak in client.cpp:470, malloc reqcls, inspected and appears okay, freed at client.cpp:568
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:SG_client_download_async_start
+   fun:SG_client_get_block_async
+}
+
+{
+   Pthread misreported leak
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   fun:allocate_dtv
+   fun:_dl_allocate_tls
+   fun:allocate_stack
+   fun:pthread_create@@GLIBC_2.2.5
+}
+
+{
+   Misreported syndicate-write leak of md_cache_block_future at cache.cpp:1887 and freed at cache.cpp:321
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   fun:_Z26md_cache_block_future_initP18md_syndicate_cacheP21md_cache_block_futuremlmliPcmm
+   fun:md_cache_write_block_async
+   fun:_ZL30SG_gateway_cache_put_raw_asyncP10SG_gatewayP15SG_request_datamlP8SG_chunkmPP21md_cache_block_future
+   fun:SG_gateway_cached_block_put_raw_async
+   fun:UG_dirty_block_flush_async
+   fun:UG_write_dirty_blocks_merge
+   fun:UG_write_impl
+   fun:fskit_route_dispatch
+   fun:fskit_route_call
+   fun:fskit_route_call_write
+   fun:fskit_run_user_write
+   fun:fskit_write
+   fun:UG_write
+   fun:main
+}
+
+{
+   Misreported syndicate-write leak of G_manifest_block, freed at manifest.cpp:392
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:SG_manifest_block_init
+   fun:SG_manifest_block_dup
+   fun:UG_inode_dirty_block_update_manifest
+   fun:UG_inode_dirty_block_commit
+   fun:UG_write_dirty_blocks_merge
+   fun:UG_write_impl
+   fun:fskit_route_dispatch
+   fun:fskit_route_call
+   fun:fskit_route_call_write
+   fun:fskit_run_user_write
+   fun:fskit_write
+   fun:UG_write
+   fun:main
+}
+
+{
+   Misreported syndicate-write leak of md_cache_block_future "f" Freed at cache.cpp:321
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   fun:md_cache_write_block_async
+   fun:_ZL30SG_gateway_cache_put_raw_asyncP10SG_gatewayP15SG_request_datamlP8SG_chunkmPP21md_cache_block_future
+   fun:SG_gateway_cached_block_put_raw_async
+   fun:UG_dirty_block_flush_async
+   fun:UG_write_dirty_blocks_merge
+   fun:UG_write_impl
+   fun:fskit_route_dispatch
+   fun:fskit_route_call
+   fun:fskit_route_call_write
+   fun:fskit_run_user_write
+   fun:fskit_write
+   fun:UG_write
+   fun:main
+}
+
+{
+   Misreported syndicate-write leak of data within a manifest chunk, gateway.cpp:1882, and freed at gateway.cpp:1935
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   fun:SG_chunk_dup
+   fun:SG_chunk_copy_or_dup
+   fun:UG_driver_chunk_serialize
+   fun:SG_gateway_impl_serialize
+   fun:UG_dirty_block_serialize
+   fun:UG_dirty_block_flush_async
+   fun:UG_write_dirty_blocks_merge
+   fun:UG_write_impl
+   fun:fskit_route_dispatch
+   fun:fskit_route_call
+   fun:fskit_route_call_write
+   fun:fskit_run_user_write
+   fun:fskit_write
+   fun:UG_write
+   fun:main
+}

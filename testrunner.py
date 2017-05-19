@@ -1275,7 +1275,8 @@ class DebugHelper():
         global args
 
         #modify the following defaults
-        self.defaultvalgrindargs = "--tool=memcheck --leak-check=full --num-callers=20 --track-fds=yes" #add '--show-reachable=yes' if you also want "indirectly lost" blocks, or add '--trace-children=yes' to trace sub-process/forked processes
+        self.defaultvalgrindargs = "--tool=memcheck --leak-check=full --num-callers=20 --track-fds=yes --suppressions=valgrind.supp" #add '--show-reachable=yes' if you also want "indirectly lost" blocks, or add '--trace-children=yes' to trace sub-process/forked processes
+        #self.defaultvalgrindargs = "--tool=memcheck --leak-check=full --num-callers=20 --track-fds=yes --gen-suppressions=all --suppressions=valgrind.supp" #add '--show-reachable=yes' if you also want "indirectly lost" blocks, or add '--trace-children=yes' to trace sub-process/forked processes
         self.defaultcallgrindargs = "--tool=callgrind"
         self.profilingexcludelist=['cat','cp','diff','fstest','grep','ls','mkdir','mv','openssl','rm','sleep','test'] #exclude these binary executables when global profling is enabled
 

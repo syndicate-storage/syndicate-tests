@@ -276,7 +276,7 @@ stream can be found within a file.
 `rangecheckout` - Again similar to "checkout", except stdout is compared to a specific portion of a file.  The portion is specified with an offset or start point (bytes) and length (bytes).
 
 
-######NOTE
+###### NOTE
 _checkout_, _checkerr_, _containsout_, _containserr_, and _rangecheckout_ are all compatible with single line or yaml list formats.  For example, the following are both valid options:
 
 ```
@@ -291,11 +291,11 @@ or
     - 'or even this'
 ```
 
-##Debugging
+## Debugging
 
 The test running framework for syndicate includes many debugging capabilities that may be helpful when things aren't quite working right.
 
-#####Logging/Verbosity Options:
+##### Logging/Verbosity Options:
 
 Within any block or task of your yaml test file, you can optionally include a "debug:" section.  The following options are available:
 
@@ -308,7 +308,7 @@ Within any block or task of your yaml test file, you can optionally include a "d
 ```
 The options described above are typically useful in the *__setup__* block whereas the options below are useful in the task sections.
 
-#####Debugging Options:
+##### Debugging Options:
 
 ```
   break : break in testrunner.py when this line is being processed
@@ -317,7 +317,7 @@ The options described above are typically useful in the *__setup__* block wherea
   valgrind: run the command with valgrind
 ```
 
-###Examples:
+### Examples:
 
 The example below will print debug logs, stdout, and stderr to the terminal.
 
@@ -327,7 +327,7 @@ You can also add 'show' which will only _show_ the commands that would be execut
 
 ```debug: verbose show```
 
-#####Python debugger
+##### Python debugger
 
 Adding 'debug: break' to your test file will cause testrunner.py to break in the python debugger (via your terminal) in the section being executed and prior to running the command.  Also remember that 'testwrapper.sh -d -n \<test number\>' will utilize the python debugger as well.
 
@@ -339,7 +339,7 @@ Adding 'debug: break' to your test file will cause testrunner.py to break in the
       debug: break
       command: echo test command
 ```
-#####gdb/ddd
+##### gdb/ddd
 You can also run the specified command in a debugger (i.e. _gdb_ or _ddd_)
 
 ```
@@ -368,7 +368,7 @@ and you can also add multiple breaks or debugger commands...
 
 Note: For the above example, since the debugger chosen was _ddd_, if you are running your testing environment in docker, you would need to start "sshd" then ssh to the container in order to run with X11 and see the GUI.
 
-#####Valgrind
+##### Valgrind
 
 You can run any task command with valgrind symply by adding `debug: valgrind` to the task block.  This will run valgrind using the following valgrind default options, `--tool=memcheck --leak-check=yes --num-callers=20 --track-fds=yes`
 

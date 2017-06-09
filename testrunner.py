@@ -29,15 +29,8 @@ else:
     import subprocess
 
 # logging
-log_level = logging.ERROR
-
-logging.basicConfig(level=log_level,
-                    format='%(asctime)s.%(msecs)03d | %(levelname)s | %(message)s',
-                    datefmt="%Y-%m-%dT%H:%M:%S")
-
-logging.Formatter.converter = time.gmtime
-
 logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
 
 # globals
 global args
@@ -101,6 +94,13 @@ def parse_args():
 
     args = parser.parse_args()
 
+    # now that we have an output file path, create a debug file handler
+    outputfilenamepath=((("%s" % args.output_file).split(",")[0]).split()[2]).replace("'","")
+    handler = logging.FileHandler(outputfilenamepath + ".debug.txt","w")
+    formatter = logging.Formatter(fmt="%(asctime)s.%(msecs)03d | %(levelname)s | %(message)s", datefmt="%Y-%m-%dT%H:%M:%S")
+    formatter.converter = time.gmtime
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
 def import_env():
 
@@ -1339,7 +1339,6 @@ class DebugHelper():
                 self.stderroption = True
             if 'verbose' in section['debug']:
                 self.verbose = True
-                logger.setLevel(logging.DEBUG) #turn on debug verbosity if specified in the yaml file
             if 'valgrind' in section['debug'] or 'grind' in section['debug'] or 'check' in section['debug']:
                 if 'type' in section and 'setup' in section['type']:
                     self.valgrindglobal = True
@@ -1472,7 +1471,12 @@ if __name__ == "__main__":
     loop_vars = {}
 
     if args.debug:
-        logger.setLevel(logging.DEBUG)
+        handler = logging.StreamHandler()
+        handler.setLevel(logging.DEBUG)
+        formatter = logging.Formatter(fmt="%(asctime)s.%(msecs)03d | %(levelname)s | %(message)s", datefmt="%Y-%m-%dT%H:%M:%S")
+        formatter.converter = time.gmtime
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
 
     start_t = time.time()
     start_dt = datetime.datetime.utcfromtimestamp(start_t)

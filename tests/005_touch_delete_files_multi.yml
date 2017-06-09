@@ -28,7 +28,6 @@
       value: $SYNDICATE_UG_ROOT/syndicate-ls
     - name: unlink_path
       value: $SYNDICATE_UG_ROOT/syndicate-unlink
-  debug: verbose stdout stderr
 
 
 - name: touch delete files test
